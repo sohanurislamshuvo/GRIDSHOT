@@ -1,0 +1,10 @@
+{
+  "name": "shadow-arena-tactical-ops",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ]
+}

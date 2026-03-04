@@ -1,0 +1,54 @@
+export const GameConfig = {
+  // World
+  WORLD_WIDTH: 2000,
+  WORLD_HEIGHT: 2000,
+  TILE_SIZE: 32,
+
+  // Viewport
+  VIEW_WIDTH: 960,
+  VIEW_HEIGHT: 640,
+
+  // Server
+  TICK_RATE: 60,
+  NETWORK_SEND_RATE: 20,
+
+  // Player
+  PLAYER_SPEED: 200,
+  PLAYER_RADIUS: 16,
+  PLAYER_MAX_HEALTH: 100,
+  PLAYER_RESPAWN_TIME: 3000,
+
+  // Projectile
+  BULLET_SPEED: 500,
+  BULLET_DAMAGE: 15,
+  BULLET_RADIUS: 4,
+  BULLET_LIFETIME: 2000,
+  FIRE_RATE: 5, // shots per second
+
+  // Bot defaults
+  BOT_SPEED: 120,
+  BOT_HEALTH: 80,
+  BOT_DAMAGE: 10,
+  BOT_DETECTION_RANGE: 300,
+  BOT_ATTACK_RANGE: 200,
+  BOT_FLEE_HEALTH_PERCENT: 0.2,
+  BOT_SHOOT_INTERVAL: 800,
+
+  // Colors
+  COLORS: {
+    PLAYER: 0x4488ff,
+    BOT: 0xff4444,
+    BOSS: 0xff8800,
+    BULLET_PLAYER: 0xffff00,
+    BULLET_BOT: 0xff6666,
+    WALL: 0x666666,
+    FLOOR: 0x2a2a2a,
+    HEALTH_GREEN: 0x44ff44,
+    HEALTH_RED: 0xff4444,
+    HEALTH_BG: 0x333333,
+    SHIELD: 0x44aaff,
+    HEAL: 0x44ff88,
+    RADAR: 0xffaa00,
+    DASH: 0xffffff
+  }
+};
