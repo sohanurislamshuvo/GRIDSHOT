@@ -1,71 +1,87 @@
-import Phaser from 'phaser';
+import * as THREE from 'three';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
 
 export class ClientProjectile {
-  constructor(scene, x, y, angle, isPlayerBullet = true) {
-    this.scene = scene;
-    this.createdAt = Date.now();
+  constructor(game, x, y, angle, isPlayerBullet = true) {
+    this.game = game;
+    this.scene = game.renderer.scene;
 
-    const texture = isPlayerBullet ? 'bullet_player' : 'bullet_bot';
-    this.sprite = scene.physics.add.sprite(x, y, texture);
-    this.sprite.setCircle(6);
-    this.sprite.setDepth(5);
-    this.sprite.setRotation(angle);
-
-    // Set velocity
-    const speed = GameConfig.BULLET_SPEED;
-    this.sprite.setVelocity(
-      Math.cos(angle) * speed,
-      Math.sin(angle) * speed
-    );
-
-    this.sprite.projectileRef = this;
-    this.isPlayerBullet = isPlayerBullet;
-    this.damage = isPlayerBullet ? GameConfig.BULLET_DAMAGE : GameConfig.BOT_DAMAGE;
+    // Game state
+    this.x = x;
+    this.y = y;
+    this.angle = angle;
+    this.radius = GameConfig.BULLET_RADIUS;
+    this.damage = GameConfig.BULLET_DAMAGE;
     this.alive = true;
+    this.isPlayerBullet = isPlayerBullet;
+    this.serverId = null;
 
-    // Trailing particle emitter
-    const trailColor = isPlayerBullet ? 0xffff88 : 0xff8888;
-    this.trail = scene.add.particles(0, 0, 'particle_white', {
-      speed: 0,
-      scale: { start: 0.5, end: 0 },
-      alpha: { start: 0.5, end: 0 },
-      lifespan: 150,
-      tint: trailColor,
-      frequency: 20,
-      follow: this.sprite,
-    });
-    this.trail.setDepth(4);
+    // Velocity
+    this.vx = Math.cos(angle) * GameConfig.BULLET_SPEED;
+    this.vy = Math.sin(angle) * GameConfig.BULLET_SPEED;
+
+    // Lifetime
+    this._createdAt = performance.now();
+
+    // 3D mesh
+    const geo = game.assets.getGeometry('bullet');
+    const mat = isPlayerBullet
+      ? game.assets.getMaterial('bulletPlayer')
+      : game.assets.getMaterial('bulletBot');
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.position.set(x, 10, y);
+    this.scene.add(this.mesh);
+
+    // Point light for glow
+    const glowColor = isPlayerBullet ? 0xffff00 : 0xff6666;
+    this.light = new THREE.PointLight(glowColor, 0.5, 60);
+    this.light.position.set(x, 10, y);
+    this.scene.add(this.light);
   }
 
-  update() {
-    // Auto-destroy after lifetime
-    if (Date.now() - this.createdAt > GameConfig.BULLET_LIFETIME) {
+  update(dt) {
+    if (!this.alive) return;
+
+    // Move
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    // Sync 3D
+    this.mesh.position.set(this.x, 10, this.y);
+    this.light.position.set(this.x, 10, this.y);
+
+    // Trail particle
+    if (Math.random() < 0.5) {
+      const color = this.isPlayerBullet ? 0xffff88 : 0xff8888;
+      this.game.particles.emit(this.x, 10, this.y, {
+        count: 1, speed: 5, color, lifetime: 0.15, size: 1.5
+      });
+    }
+
+    // Check lifetime
+    if (performance.now() - this._createdAt > GameConfig.BULLET_LIFETIME) {
       this.destroy();
       return;
     }
 
-    // Destroy if out of world bounds
-    if (this.sprite.x < 0 || this.sprite.x > GameConfig.WORLD_WIDTH ||
-        this.sprite.y < 0 || this.sprite.y > GameConfig.WORLD_HEIGHT) {
+    // Check world bounds
+    if (this.x < 0 || this.x > GameConfig.WORLD_WIDTH || this.y < 0 || this.y > GameConfig.WORLD_HEIGHT) {
       this.destroy();
     }
   }
 
+  setPosition(x, y) {
+    this.x = x;
+    this.y = y;
+    this.mesh.position.set(x, 10, y);
+    this.light.position.set(x, 10, y);
+  }
+
   destroy() {
-    if (!this.alive) return;
     this.alive = false;
-
-    if (this.trail) {
-      this.trail.stop();
-      this.scene.time.delayedCall(200, () => {
-        if (this.trail) {
-          this.trail.destroy();
-          this.trail = null;
-        }
-      });
-    }
-
-    this.sprite.destroy();
+    this.scene.remove(this.mesh);
+    this.scene.remove(this.light);
+    this.mesh.geometry?.dispose();
+    this.light.dispose();
   }
 }

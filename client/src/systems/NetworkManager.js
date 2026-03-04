@@ -2,8 +2,7 @@ import { io } from 'socket.io-client';
 import { MessageTypes } from 'shadow-arena-shared/utils/MessageTypes.js';
 
 export class NetworkManager {
-  constructor(scene) {
-    this.scene = scene;
+  constructor() {
     this.socket = null;
     this.connected = false;
     this.playerId = null;
@@ -45,7 +44,6 @@ export class NetworkManager {
       console.log('Disconnected from server');
     });
 
-    // Game events
     this.socket.on(MessageTypes.MATCH_START, (data) => {
       this.roomId = data.roomId;
       if (this.onMatchStart) this.onMatchStart(data);
@@ -62,10 +60,7 @@ export class NetworkManager {
 
     this.socket.on(MessageTypes.SNAPSHOT, (snapshot) => {
       this.serverSnapshots.push(snapshot);
-      // Keep only last 10 snapshots
-      if (this.serverSnapshots.length > 10) {
-        this.serverSnapshots.shift();
-      }
+      if (this.serverSnapshots.length > 10) this.serverSnapshots.shift();
       if (this.onSnapshot) this.onSnapshot(snapshot);
     });
 
@@ -119,19 +114,10 @@ export class NetworkManager {
 
   sendInput(input) {
     if (!this.connected) return;
-
     const seq = this.inputSequence++;
-    const inputPacket = {
-      seq,
-      ...input,
-      timestamp: Date.now()
-    };
-
-    // Store for reconciliation
+    const inputPacket = { seq, ...input, timestamp: Date.now() };
     this.pendingInputs.push(inputPacket);
-
     this.socket.emit(MessageTypes.PLAYER_INPUT, inputPacket);
-
     return seq;
   }
 
@@ -141,12 +127,8 @@ export class NetworkManager {
   }
 
   reconcile(serverPlayerState) {
-    // Remove inputs that the server has already processed
     const lastProcessed = serverPlayerState.lastProcessedInput;
-    this.pendingInputs = this.pendingInputs.filter(
-      input => input.seq > lastProcessed
-    );
-
+    this.pendingInputs = this.pendingInputs.filter(input => input.seq > lastProcessed);
     return this.pendingInputs;
   }
 

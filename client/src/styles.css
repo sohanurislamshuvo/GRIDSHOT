@@ -1,0 +1,275 @@
+/* ─── MENU SCREEN ─────────────────────────────────────────────── */
+.menu-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 17, 17, 0.95);
+  z-index: 50;
+}
+
+.menu-title {
+  font-size: 48px;
+  color: #4488ff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.menu-subtitle {
+  font-size: 28px;
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  font-weight: normal;
+  margin-bottom: 20px;
+}
+
+.menu-status {
+  font-size: 14px;
+  color: #ffaa00;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 20px;
+  min-height: 20px;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.menu-btn {
+  font-size: 20px;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  background: #333;
+  border: none;
+  padding: 12px 30px;
+  cursor: pointer;
+  min-width: 260px;
+  text-align: center;
+  transition: color 0.15s, background 0.15s;
+}
+.menu-btn:hover {
+  color: #4488ff;
+  background: #444;
+}
+
+.menu-controls {
+  position: absolute;
+  bottom: 40px;
+  font-size: 13px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ─── GAME OVER SCREEN ───────────────────────────────────────── */
+.gameover-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 17, 17, 0.9);
+  z-index: 50;
+}
+
+.gameover-title {
+  font-size: 64px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.gameover-stats {
+  font-size: 18px;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 30px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.gameover-btn {
+  margin-top: 20px;
+}
+
+/* ─── HUD ────────────────────────────────────────────────────── */
+.hud {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+.hud-top-left {
+  position: absolute;
+  top: 20px; left: 20px;
+}
+
+.hud-health-text {
+  font-size: 16px;
+  color: #44ff44;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 4px #000;
+  margin-bottom: 4px;
+}
+
+.hud-health-bar {
+  width: 200px;
+  height: 12px;
+  background: rgba(51, 51, 51, 0.8);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.hud-health-fill {
+  width: 100%;
+  height: 100%;
+  background: #44ff44;
+  transition: width 0.15s;
+}
+
+.hud-stats {
+  font-size: 14px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 3px #000;
+}
+
+.hud-top-right {
+  position: absolute;
+  top: 20px; right: 20px;
+}
+
+.hud-mode {
+  font-size: 14px;
+  color: #4488ff;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 3px #000;
+}
+
+/* ─── ABILITY BAR ────────────────────────────────────────────── */
+.hud-bottom-center {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.hud-ability-bar {
+  display: flex;
+  gap: 12px;
+}
+
+.hud-ability {
+  position: relative;
+  width: 64px;
+  height: 36px;
+  background: rgba(34, 34, 34, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.hud-ability[data-key="dash"]   { border-color: rgba(255, 255, 255, 0.6); }
+.hud-ability[data-key="shield"] { border-color: rgba(68, 170, 255, 0.6); }
+.hud-ability[data-key="radar"]  { border-color: rgba(255, 170, 0, 0.6); }
+.hud-ability[data-key="heal"]   { border-color: rgba(68, 255, 136, 0.6); }
+
+.hud-ability-label {
+  font-size: 11px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.hud-ability.on-cooldown .hud-ability-label {
+  opacity: 0.5;
+}
+
+.hud-ability-cooldown-overlay {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  width: 0%;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+.hud-ability-cooldown-text {
+  position: absolute;
+  font-size: 14px;
+  color: #ffaa00;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* ─── RESPAWN ────────────────────────────────────────────────── */
+.hud-respawn {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32px;
+  color: #ff4444;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 6px #000;
+  display: none;
+}
+
+/* ─── MATCH RESULT ───────────────────────────────────────────── */
+.hud-result {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 64px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  text-shadow: 0 0 8px #000;
+  display: none;
+}
+
+/* ─── MINIMAP ────────────────────────────────────────────────── */
+.hud-minimap {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  margin-top: 30px;
+}
+
+.minimap-canvas {
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+/* ─── MOBILE ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .menu-title { font-size: 36px; }
+  .menu-subtitle { font-size: 20px; }
+  .menu-btn { padding: 16px 36px; font-size: 18px; }
+
+  .hud-ability {
+    width: 72px;
+    height: 44px;
+  }
+  .hud-ability-label { font-size: 12px; }
+  .hud-bottom-center { bottom: 180px; }
+}

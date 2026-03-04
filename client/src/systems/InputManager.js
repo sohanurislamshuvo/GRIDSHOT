@@ -1,160 +1,168 @@
-import Phaser from 'phaser';
-import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
-import { VirtualJoystick } from '../ui/VirtualJoystick.js';
+import * as THREE from 'three';
 
 export class InputManager {
-  constructor(scene) {
-    this.scene = scene;
-    this.keys = {};
-    this.mouseAngle = 0;
-    this.shooting = false;
-    this.abilityPressed = null;
+  constructor(canvas, camera, player) {
+    this.canvas = canvas;
+    this.camera = camera;
+    this.player = player;
 
-    // Mobile detection (with screen-width fallback for emulators)
+    this._keys = {};
+    this._mouseAngle = 0;
+    this._shooting = false;
+    this._abilityQueue = null;
+    this._justPressed = {};
+    this._escape = false;
+
+    // Mobile detection
     this.isMobile = ('ontouchstart' in window)
       || (navigator.maxTouchPoints > 0)
       || (window.innerWidth < 1024 && 'orientation' in window);
 
-    // Touch ability trigger (set by UIScene ability buttons)
-    this._touchAbility = null;
+    // Raycaster for mouse-to-world
+    this._raycaster = new THREE.Raycaster();
+    this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    this._mouseNDC = new THREE.Vector2();
+    this._worldPoint = new THREE.Vector3();
 
-    if (this.isMobile) {
-      this.setupMobileControls();
-    } else {
-      this.setupKeys();
-      this.setupMouse();
+    // Mobile joystick references (set by UIManager)
+    this.moveJoystick = null;
+    this.aimJoystick = null;
+
+    if (!this.isMobile) {
+      this._setupKeyboard();
+      this._setupMouse();
     }
   }
 
-  setupKeys() {
-    this.keys = this.scene.input.keyboard.addKeys({
-      up: Phaser.Input.Keyboard.KeyCodes.W,
-      down: Phaser.Input.Keyboard.KeyCodes.S,
-      left: Phaser.Input.Keyboard.KeyCodes.A,
-      right: Phaser.Input.Keyboard.KeyCodes.D,
-      dash: Phaser.Input.Keyboard.KeyCodes.Q,
-      shield: Phaser.Input.Keyboard.KeyCodes.E,
-      radar: Phaser.Input.Keyboard.KeyCodes.R,
-      heal: Phaser.Input.Keyboard.KeyCodes.F,
-      escape: Phaser.Input.Keyboard.KeyCodes.ESC
-    });
-  }
-
-  setupMouse() {
-    this.scene.input.on('pointermove', (pointer) => {
-      this.updateMouseAngle(pointer);
-    });
-
-    this.scene.input.on('pointerdown', (pointer) => {
-      if (pointer.leftButtonDown()) {
-        this.shooting = true;
+  _setupKeyboard() {
+    const onKeyDown = (e) => {
+      this._keys[e.code] = true;
+      // Track just-pressed for abilities
+      if (['KeyQ', 'KeyE', 'KeyR', 'KeyF'].includes(e.code)) {
+        this._justPressed[e.code] = true;
       }
-    });
+      if (e.code === 'Escape') this._escape = true;
+    };
+    const onKeyUp = (e) => {
+      this._keys[e.code] = false;
+    };
 
-    this.scene.input.on('pointerup', (pointer) => {
-      if (!pointer.leftButtonDown()) {
-        this.shooting = false;
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    this._cleanupFns = [
+      () => document.removeEventListener('keydown', onKeyDown),
+      () => document.removeEventListener('keyup', onKeyUp)
+    ];
+  }
+
+  _setupMouse() {
+    const onMove = (e) => {
+      if (!this.player) return;
+      // Convert mouse to NDC
+      this._mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
+      this._mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      // Raycast to ground plane
+      this._raycaster.setFromCamera(this._mouseNDC, this.camera);
+      this._raycaster.ray.intersectPlane(this._groundPlane, this._worldPoint);
+
+      if (this._worldPoint) {
+        // worldPoint.x = game x, worldPoint.z = game y
+        this._mouseAngle = Math.atan2(
+          this._worldPoint.z - this.player.y,
+          this._worldPoint.x - this.player.x
+        );
       }
-    });
-  }
+    };
 
-  setupMobileControls() {
-    // Use actual screen dimensions (works with EXPAND scale mode)
-    const vw = this.scene.scale.width;
-    const vh = this.scene.scale.height;
+    const onDown = (e) => {
+      if (e.button === 0) this._shooting = true;
+    };
+    const onUp = (e) => {
+      if (e.button === 0) this._shooting = false;
+    };
 
-    // Left joystick (movement) - bottom-left
-    this.moveJoystick = new VirtualJoystick(this.scene, 100, vh - 100, {
-      baseRadius: 50,
-      thumbRadius: 20,
-      baseColor: 0xffffff,
-      thumbColor: 0x4488ff,
-      baseAlpha: 0.25,
-      thumbAlpha: 0.5,
-    });
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('mouseup', onUp);
 
-    // Right joystick (aim+shoot) - bottom-right
-    this.aimJoystick = new VirtualJoystick(this.scene, vw - 100, vh - 100, {
-      baseRadius: 50,
-      thumbRadius: 20,
-      baseColor: 0xffffff,
-      thumbColor: 0xff4444,
-      baseAlpha: 0.25,
-      thumbAlpha: 0.5,
-    });
-  }
+    // Prevent context menu on canvas
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-  updateMouseAngle(pointer) {
-    const player = this.scene.player;
-    if (!player || !player.sprite) return;
-
-    const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    this.mouseAngle = Phaser.Math.Angle.Between(
-      player.sprite.x, player.sprite.y,
-      worldPoint.x, worldPoint.y
+    this._cleanupFns.push(
+      () => document.removeEventListener('mousemove', onMove),
+      () => document.removeEventListener('mousedown', onDown),
+      () => document.removeEventListener('mouseup', onUp)
     );
   }
 
-  /** Called by UIScene ability buttons on mobile */
+  /** Called by mobile UI ability buttons */
   triggerAbility(name) {
-    this._touchAbility = name;
+    this._abilityQueue = name;
   }
 
   getInput() {
-    if (this.isMobile) {
-      return this.getMobileInput();
-    }
-    return this.getDesktopInput();
+    if (this.isMobile) return this._getMobileInput();
+    return this._getDesktopInput();
   }
 
-  getDesktopInput() {
+  _getDesktopInput() {
     let ability = null;
-    if (Phaser.Input.Keyboard.JustDown(this.keys.dash)) ability = 'dash';
-    else if (Phaser.Input.Keyboard.JustDown(this.keys.shield)) ability = 'shield';
-    else if (Phaser.Input.Keyboard.JustDown(this.keys.radar)) ability = 'radar';
-    else if (Phaser.Input.Keyboard.JustDown(this.keys.heal)) ability = 'heal';
+    if (this._justPressed['KeyQ']) { ability = 'dash'; this._justPressed['KeyQ'] = false; }
+    else if (this._justPressed['KeyE']) { ability = 'shield'; this._justPressed['KeyE'] = false; }
+    else if (this._justPressed['KeyR']) { ability = 'radar'; this._justPressed['KeyR'] = false; }
+    else if (this._justPressed['KeyF']) { ability = 'heal'; this._justPressed['KeyF'] = false; }
+
+    const escape = this._escape;
+    this._escape = false;
 
     return {
-      up: this.keys.up.isDown,
-      down: this.keys.down.isDown,
-      left: this.keys.left.isDown,
-      right: this.keys.right.isDown,
-      angle: this.mouseAngle,
-      shoot: this.shooting,
-      ability: ability
+      up: !!this._keys['KeyW'],
+      down: !!this._keys['KeyS'],
+      left: !!this._keys['KeyA'],
+      right: !!this._keys['KeyD'],
+      angle: this._mouseAngle,
+      shoot: this._shooting,
+      ability,
+      escape
     };
   }
 
-  getMobileInput() {
-    // Movement from left joystick
-    const moveDir = this.moveJoystick.getDirection();
+  _getMobileInput() {
     const threshold = 0.3;
+    let moveX = 0, moveY = 0;
+    if (this.moveJoystick) {
+      const dir = this.moveJoystick.getDirection();
+      moveX = dir.x;
+      moveY = dir.y;
+    }
 
-    // Aim from right joystick
-    const aimActive = this.aimJoystick.isActive();
-    const aimAngle = aimActive ? this.aimJoystick.getAngle() : this.mouseAngle;
+    let aimAngle = this._mouseAngle;
+    let shooting = false;
+    if (this.aimJoystick && this.aimJoystick.isActive()) {
+      aimAngle = this.aimJoystick.getAngle();
+      shooting = true;
+    }
 
-    // Read and consume touch ability
-    const ability = this._touchAbility;
-    this._touchAbility = null;
+    const ability = this._abilityQueue;
+    this._abilityQueue = null;
 
     return {
-      up: moveDir.y < -threshold,
-      down: moveDir.y > threshold,
-      left: moveDir.x < -threshold,
-      right: moveDir.x > threshold,
+      up: moveY < -threshold,
+      down: moveY > threshold,
+      left: moveX < -threshold,
+      right: moveX > threshold,
       angle: aimAngle,
-      shoot: aimActive,
-      ability: ability
+      shoot: shooting,
+      ability,
+      escape: false
     };
   }
 
   destroy() {
-    if (!this.isMobile) {
-      this.scene.input.keyboard.removeAllKeys(true);
+    if (this._cleanupFns) {
+      for (const fn of this._cleanupFns) fn();
+      this._cleanupFns = [];
     }
-    this.scene.input.removeAllListeners();
-    if (this.moveJoystick) this.moveJoystick.destroy();
-    if (this.aimJoystick) this.aimJoystick.destroy();
   }
 }

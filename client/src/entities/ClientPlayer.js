@@ -1,52 +1,57 @@
-import Phaser from 'phaser';
+import * as THREE from 'three';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
+import { CharacterFactory } from './CharacterFactory.js';
 
 export class ClientPlayer {
-  constructor(scene, x, y) {
-    this.scene = scene;
-    this.entity = null;
+  constructor(game, x, y) {
+    this.game = game;
+    this.scene = game.renderer.scene;
 
-    // Drop shadow (below player)
-    this.shadow = scene.add.sprite(x, y, 'shadow');
-    this.shadow.setDepth(9);
-    this.shadow.setAlpha(0.4);
-
-    // Create sprite (48x48 human texture)
-    this.sprite = scene.physics.add.sprite(x, y, 'player');
-    this.sprite.setCircle(20, 4, 4);
-    this.sprite.setDepth(10);
-    this.sprite.body.setCollideWorldBounds(true);
-
-    // Health bar
-    this.healthBar = scene.add.graphics();
-    this.healthBar.setDepth(20);
-
-    // Shield visual
-    this.shieldSprite = scene.add.sprite(x, y, 'shield_effect');
-    this.shieldSprite.setDepth(11);
-    this.shieldSprite.setVisible(false);
-    this.shieldSprite.setAlpha(0.6);
-
-    // Dust particle emitter (movement effect)
-    this.dustEmitter = scene.add.particles(0, 0, 'particle_white', {
-      speed: { min: 10, max: 30 },
-      scale: { start: 0.8, end: 0 },
-      alpha: { start: 0.4, end: 0 },
-      lifespan: 300,
-      tint: 0x888888,
-      frequency: -1,
-      quantity: 1,
-    });
-    this.dustEmitter.setDepth(8);
-
-    // Track state
+    // Game state
+    this.x = x;
+    this.y = y;
+    this.rotation = 0;
+    this.radius = GameConfig.PLAYER_RADIUS;
     this.health = GameConfig.PLAYER_MAX_HEALTH;
     this.maxHealth = GameConfig.PLAYER_MAX_HEALTH;
     this.alive = true;
     this.speed = GameConfig.PLAYER_SPEED;
-    this.lastShotTime = 0;
     this.shieldActive = false;
-    this._dustTimer = 0;
+
+    // Shooting
+    this._lastShotTime = 0;
+    this._fireInterval = 1000 / GameConfig.FIRE_RATE;
+
+    // 3D model
+    this.group = CharacterFactory.createPlayer(game.assets);
+    this.group.position.set(x, 0, y);
+    this.scene.add(this.group);
+
+    // Shadow (flat dark circle on ground)
+    const shadowGeo = new THREE.CircleGeometry(12, 16);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false
+    });
+    this.shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    this.shadow.rotation.x = -Math.PI / 2;
+    this.shadow.position.set(x, 0.5, y);
+    this.scene.add(this.shadow);
+
+    // Shield mesh (invisible by default)
+    this.shieldMesh = new THREE.Mesh(
+      game.assets.getGeometry('shield'),
+      game.assets.getMaterial('shield')
+    );
+    this.shieldMesh.position.set(x, 15, y);
+    this.shieldMesh.visible = false;
+    this.scene.add(this.shieldMesh);
+
+    // Original materials for flash restore
+    this._originalMaterials = [];
+    this.group.traverse(child => {
+      if (child.isMesh) this._originalMaterials.push({ mesh: child, material: child.material });
+    });
+    this._flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   }
 
   update(input, dt) {
@@ -54,10 +59,10 @@ export class ClientPlayer {
 
     // Movement
     let mx = 0, my = 0;
-    if (input.up) my = -1;
-    if (input.down) my = 1;
-    if (input.left) mx = -1;
-    if (input.right) mx = 1;
+    if (input.up) my -= 1;
+    if (input.down) my += 1;
+    if (input.left) mx -= 1;
+    if (input.right) mx += 1;
 
     // Normalize diagonal
     if (mx !== 0 && my !== 0) {
@@ -66,157 +71,120 @@ export class ClientPlayer {
       my *= inv;
     }
 
-    this.sprite.setVelocity(mx * this.speed, my * this.speed);
+    this.x += mx * this.speed * dt;
+    this.y += my * this.speed * dt;
 
-    // Rotation (aim)
-    this.sprite.setRotation(input.angle);
+    // Rotation (aim angle)
+    this.rotation = input.angle;
 
-    // Update shadow position
-    this.shadow.setPosition(this.sprite.x, this.sprite.y + 4);
+    this.syncModel();
 
-    // Update health bar position
-    this.drawHealthBar();
-
-    // Update shield position
-    if (this.shieldActive) {
-      this.shieldSprite.setPosition(this.sprite.x, this.sprite.y);
-    }
-
-    // Emit dust when moving
-    const isMoving = (mx !== 0 || my !== 0);
-    if (isMoving) {
-      this._dustTimer += dt;
-      if (this._dustTimer > 0.06) {
-        this._dustTimer = 0;
-        this.dustEmitter.emitParticleAt(this.sprite.x, this.sprite.y + 8, 1);
+    // Movement dust particles
+    if (mx !== 0 || my !== 0) {
+      if (Math.random() < 0.3) {
+        this.game.particles.emit(this.x, 2, this.y, {
+          count: 1, speed: 20, color: 0x888888, lifetime: 0.3, size: 1.5
+        });
       }
-    } else {
-      this._dustTimer = 0;
     }
+  }
+
+  syncModel() {
+    this.group.position.set(this.x, 0, this.y);
+    this.group.rotation.y = -this.rotation + Math.PI / 2;
+    this.shadow.position.set(this.x, 0.5, this.y);
+    this.shieldMesh.position.set(this.x, 15, this.y);
   }
 
   shoot() {
-    const now = Date.now();
-    const interval = 1000 / GameConfig.FIRE_RATE;
-    if (now - this.lastShotTime < interval) return null;
-    if (!this.alive) return null;
+    const now = performance.now();
+    if (now - this._lastShotTime < this._fireInterval) return null;
+    this._lastShotTime = now;
 
-    this.lastShotTime = now;
+    const gunDist = 24;
+    const bx = this.x + Math.cos(this.rotation) * gunDist;
+    const by = this.y + Math.sin(this.rotation) * gunDist;
 
-    // Spawn position slightly in front of player
-    const offsetX = Math.cos(this.sprite.rotation) * 24;
-    const offsetY = Math.sin(this.sprite.rotation) * 24;
+    // Muzzle flash particles
+    this.game.particles.emit(bx, 12, by, {
+      count: 3, speed: 40, color: 0xffffaa, lifetime: 0.08, size: 3
+    });
 
-    // Muzzle flash effect
-    const flashX = this.sprite.x + offsetX;
-    const flashY = this.sprite.y + offsetY;
-    if (this.scene.spawnMuzzleFlash) {
-      this.scene.spawnMuzzleFlash(flashX, flashY);
-    }
-
-    return {
-      x: this.sprite.x + offsetX,
-      y: this.sprite.y + offsetY,
-      angle: this.sprite.rotation
-    };
+    return { x: bx, y: by, angle: this.rotation };
   }
 
   takeDamage(amount) {
-    let actual = amount;
-    if (this.shieldActive) {
-      actual = Math.floor(amount * 0.2);
-    }
-    this.health -= actual;
-
-    // Hit flash effect
-    this.sprite.setTint(0xffffff);
-    this.scene.time.delayedCall(80, () => {
-      if (this.alive) this.sprite.clearTint();
-    });
-
-    // Camera micro-shake
-    this.scene.cameras.main.shake(60, 0.003);
-
+    if (this.shieldActive) amount = Math.floor(amount * 0.2);
+    this.health -= amount;
     if (this.health <= 0) {
       this.health = 0;
       this.die();
+    } else {
+      this._flashWhite();
+      this.game.shakeCamera();
     }
-    return actual;
+  }
+
+  _flashWhite() {
+    this.group.traverse(child => {
+      if (child.isMesh) child.material = this._flashMat;
+    });
+    setTimeout(() => {
+      for (const { mesh, material } of this._originalMaterials) {
+        mesh.material = material;
+      }
+    }, 80);
   }
 
   die() {
     this.alive = false;
-    this.sprite.setVisible(false);
-    this.sprite.body.enable = false;
-    this.healthBar.clear();
-    this.shieldSprite.setVisible(false);
-    this.shadow.setVisible(false);
+    this.group.visible = false;
+    this.shadow.visible = false;
+    this.shieldMesh.visible = false;
 
-    // Death explosion particles
-    if (this.scene.spawnDeathExplosion) {
-      this.scene.spawnDeathExplosion(this.sprite.x, this.sprite.y, GameConfig.COLORS.PLAYER);
-    }
+    this.game.particles.emit(this.x, 15, this.y, {
+      count: 12, speed: 120, color: GameConfig.COLORS.PLAYER, lifetime: 0.4, size: 3
+    });
   }
 
   respawn(x, y) {
+    this.x = x;
+    this.y = y;
     this.health = this.maxHealth;
     this.alive = true;
-    this.sprite.setPosition(x, y);
-    this.sprite.setVisible(true);
-    this.sprite.body.enable = true;
     this.shieldActive = false;
-    this.shieldSprite.setVisible(false);
-    this.shadow.setVisible(true);
-    this.shadow.setPosition(x, y + 4);
+    this.group.visible = true;
+    this.shadow.visible = true;
+    this.shieldMesh.visible = false;
+    this.syncModel();
   }
 
   setShield(active) {
     this.shieldActive = active;
-    this.shieldSprite.setVisible(active);
-    if (active) {
-      this.shieldSprite.setPosition(this.sprite.x, this.sprite.y);
-    }
+    this.shieldMesh.visible = active;
   }
 
-  drawHealthBar() {
-    this.healthBar.clear();
-    if (!this.alive) return;
-
-    const barWidth = 36;
-    const barHeight = 5;
-    const x = this.sprite.x - barWidth / 2;
-    const y = this.sprite.y - 30;
-
-    // Border
-    this.healthBar.fillStyle(0x000000, 0.9);
-    this.healthBar.fillRoundedRect(x - 1, y - 1, barWidth + 2, barHeight + 2, 2);
-
-    // Background
-    this.healthBar.fillStyle(GameConfig.COLORS.HEALTH_BG, 0.9);
-    this.healthBar.fillRoundedRect(x, y, barWidth, barHeight, 2);
-
-    // Health fill
-    const pct = this.health / this.maxHealth;
-    let color;
-    if (pct > 0.6) color = GameConfig.COLORS.HEALTH_GREEN;
-    else if (pct > 0.3) color = GameConfig.COLORS.HEALTH_YELLOW;
-    else color = GameConfig.COLORS.HEALTH_RED;
-
-    if (pct > 0) {
-      this.healthBar.fillStyle(color, 1);
-      this.healthBar.fillRoundedRect(x, y, barWidth * pct, barHeight, 2);
+  setHealTint(active) {
+    if (active) {
+      const greenMat = new THREE.MeshBasicMaterial({ color: 0x88ff88 });
+      this.group.traverse(child => {
+        if (child.isMesh) child.material = greenMat;
+      });
+    } else {
+      for (const { mesh, material } of this._originalMaterials) {
+        mesh.material = material;
+      }
     }
-
-    // Highlight shine
-    this.healthBar.fillStyle(0xffffff, 0.2);
-    this.healthBar.fillRect(x + 1, y + 1, Math.max(0, barWidth * pct - 2), 1);
   }
 
   destroy() {
-    this.sprite.destroy();
-    this.healthBar.destroy();
-    this.shieldSprite.destroy();
-    this.shadow.destroy();
-    if (this.dustEmitter) this.dustEmitter.destroy();
+    this.scene.remove(this.group);
+    this.scene.remove(this.shadow);
+    this.scene.remove(this.shieldMesh);
+    this.group.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+    });
+    this.shadow.geometry.dispose();
+    this.shadow.material.dispose();
   }
 }

@@ -1,160 +1,129 @@
-import Phaser from 'phaser';
+import * as THREE from 'three';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
+import { CharacterFactory } from './CharacterFactory.js';
 
-const INTERPOLATION_DELAY = 100; // ms
+const INTERPOLATION_DELAY = 100;
 
 export class RemotePlayer {
-  constructor(scene, id, x, y, team) {
-    this.scene = scene;
+  constructor(game, id, x, y, team) {
+    this.game = game;
+    this.scene = game.renderer.scene;
     this.id = id;
     this.team = team;
 
-    // Drop shadow
-    this.shadow = scene.add.sprite(x, y, 'shadow');
-    this.shadow.setDepth(8);
-    this.shadow.setAlpha(0.35);
-
-    // Create sprite (uses new 48x48 player texture)
-    this.sprite = scene.physics.add.sprite(x, y, 'player');
-    this.sprite.setCircle(20, 4, 4);
-    this.sprite.setDepth(9);
-
-    // Tint based on team
-    if (team === 'red') {
-      this.sprite.setTint(0xff6666);
-    } else if (team === 'blue') {
-      this.sprite.setTint(0x6666ff);
-    } else {
-      this.sprite.setTint(0xff8800);
-    }
-
-    // Health bar
-    this.healthBar = scene.add.graphics();
-    this.healthBar.setDepth(20);
-
-    // Shield visual
-    this.shieldSprite = scene.add.sprite(x, y, 'shield_effect');
-    this.shieldSprite.setDepth(11);
-    this.shieldSprite.setVisible(false);
-
-    // Interpolation buffer
-    this.positionBuffer = [];
+    // State
+    this.x = x;
+    this.y = y;
+    this.rotation = 0;
     this.health = GameConfig.PLAYER_MAX_HEALTH;
     this.maxHealth = GameConfig.PLAYER_MAX_HEALTH;
     this.alive = true;
-    this.shieldActive = false;
+
+    // Snapshot buffer
+    this._snapshots = [];
+
+    // 3D model
+    this.group = CharacterFactory.createPlayer(game.assets);
+    this.group.position.set(x, 0, y);
+
+    // Team color tint
+    if (team) {
+      const teamColors = { red: 0xff4444, blue: 0x4444ff, orange: 0xffaa00 };
+      const tintColor = teamColors[team] || 0xffffff;
+      const tintMat = new THREE.MeshStandardMaterial({ color: tintColor, roughness: 0.6, metalness: 0.3 });
+      this.group.traverse(child => {
+        if (child.isMesh) child.material = tintMat;
+      });
+    }
+
+    this.scene.add(this.group);
+
+    // Shadow
+    const shadowGeo = new THREE.CircleGeometry(12, 16);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false
+    });
+    this.shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    this.shadow.rotation.x = -Math.PI / 2;
+    this.shadow.position.set(x, 0.5, y);
+    this.scene.add(this.shadow);
   }
 
   addSnapshot(state) {
-    this.positionBuffer.push({
+    this._snapshots.push({
       x: state.x,
       y: state.y,
       rotation: state.rotation,
-      timestamp: Date.now(),
       health: state.health,
       alive: state.alive,
-      shieldActive: state.shieldActive
+      timestamp: Date.now()
     });
-
-    if (this.positionBuffer.length > 10) {
-      this.positionBuffer.shift();
-    }
+    if (this._snapshots.length > 10) this._snapshots.shift();
 
     this.health = state.health;
     this.maxHealth = state.maxHealth;
     this.alive = state.alive;
-    this.shieldActive = state.shieldActive;
-
-    this.sprite.setVisible(this.alive);
-    this.sprite.body.enable = this.alive;
-    this.shadow.setVisible(this.alive);
-    this.shieldSprite.setVisible(this.alive && this.shieldActive);
+    this.group.visible = state.alive;
+    this.shadow.visible = state.alive;
   }
 
   interpolate() {
-    if (this.positionBuffer.length < 2) return;
+    if (this._snapshots.length < 2) {
+      if (this._snapshots.length === 1) {
+        const s = this._snapshots[0];
+        this.x = s.x;
+        this.y = s.y;
+        this.rotation = s.rotation;
+        this._syncModel();
+      }
+      return;
+    }
 
     const renderTime = Date.now() - INTERPOLATION_DELAY;
-
-    let previous = null;
-    let target = null;
-
-    for (let i = 0; i < this.positionBuffer.length - 1; i++) {
-      if (this.positionBuffer[i].timestamp <= renderTime &&
-          this.positionBuffer[i + 1].timestamp >= renderTime) {
-        previous = this.positionBuffer[i];
-        target = this.positionBuffer[i + 1];
-        break;
-      }
+    let i = 0;
+    while (i < this._snapshots.length - 1 && this._snapshots[i + 1].timestamp <= renderTime) {
+      i++;
     }
 
-    if (!previous || !target) {
-      const latest = this.positionBuffer[this.positionBuffer.length - 1];
-      this.sprite.setPosition(latest.x, latest.y);
-      this.sprite.setRotation(latest.rotation);
+    if (i < this._snapshots.length - 1) {
+      const a = this._snapshots[i];
+      const b = this._snapshots[i + 1];
+      const range = b.timestamp - a.timestamp;
+      const t = range > 0 ? Math.max(0, Math.min(1, (renderTime - a.timestamp) / range)) : 1;
+
+      this.x = a.x + (b.x - a.x) * t;
+      this.y = a.y + (b.y - a.y) * t;
+      this.rotation = this._lerpAngle(a.rotation, b.rotation, t);
     } else {
-      const timeDiff = target.timestamp - previous.timestamp;
-      const elapsed = renderTime - previous.timestamp;
-      const t = timeDiff > 0 ? elapsed / timeDiff : 0;
-      const clampedT = Math.max(0, Math.min(1, t));
-
-      const x = Phaser.Math.Linear(previous.x, target.x, clampedT);
-      const y = Phaser.Math.Linear(previous.y, target.y, clampedT);
-      const rotation = Phaser.Math.Angle.RotateTo(previous.rotation, target.rotation, clampedT);
-
-      this.sprite.setPosition(x, y);
-      this.sprite.setRotation(rotation);
+      const last = this._snapshots[this._snapshots.length - 1];
+      this.x = last.x;
+      this.y = last.y;
+      this.rotation = last.rotation;
     }
 
-    // Update shadow position
-    this.shadow.setPosition(this.sprite.x, this.sprite.y + 4);
-
-    // Update shield position
-    if (this.shieldActive) {
-      this.shieldSprite.setPosition(this.sprite.x, this.sprite.y);
-    }
-
-    this.drawHealthBar();
+    this._syncModel();
   }
 
-  drawHealthBar() {
-    this.healthBar.clear();
-    if (!this.alive) return;
+  _lerpAngle(a, b, t) {
+    let diff = b - a;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return a + diff * t;
+  }
 
-    const barWidth = 36;
-    const barHeight = 5;
-    const x = this.sprite.x - barWidth / 2;
-    const y = this.sprite.y - 30;
-
-    // Border
-    this.healthBar.fillStyle(0x000000, 0.9);
-    this.healthBar.fillRoundedRect(x - 1, y - 1, barWidth + 2, barHeight + 2, 2);
-
-    // Background
-    this.healthBar.fillStyle(GameConfig.COLORS.HEALTH_BG, 0.9);
-    this.healthBar.fillRoundedRect(x, y, barWidth, barHeight, 2);
-
-    // Health fill
-    const pct = this.health / this.maxHealth;
-    let color;
-    if (pct > 0.6) color = GameConfig.COLORS.HEALTH_GREEN;
-    else if (pct > 0.3) color = GameConfig.COLORS.HEALTH_YELLOW;
-    else color = GameConfig.COLORS.HEALTH_RED;
-
-    if (pct > 0) {
-      this.healthBar.fillStyle(color, 1);
-      this.healthBar.fillRoundedRect(x, y, barWidth * pct, barHeight, 2);
-    }
-
-    // Highlight shine
-    this.healthBar.fillStyle(0xffffff, 0.2);
-    this.healthBar.fillRect(x + 1, y + 1, Math.max(0, barWidth * pct - 2), 1);
+  _syncModel() {
+    this.group.position.set(this.x, 0, this.y);
+    this.group.rotation.y = -this.rotation + Math.PI / 2;
+    this.shadow.position.set(this.x, 0.5, this.y);
   }
 
   destroy() {
-    this.sprite.destroy();
-    this.healthBar.destroy();
-    this.shieldSprite.destroy();
-    this.shadow.destroy();
+    this.scene.remove(this.group);
+    this.scene.remove(this.shadow);
+    this.group.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+    });
+    this.shadow.geometry.dispose();
+    this.shadow.material.dispose();
   }
 }
