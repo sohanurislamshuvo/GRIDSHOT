@@ -138,15 +138,26 @@ export class Game {
 
     const input = this.input.getInput();
 
+    // Handle view toggle (V key)
+    if (input.viewToggle) {
+      const newMode = this.renderer.cycleViewMode();
+      this.player.setCameraMode(newMode);
+      this.input.setCameraMode(newMode);
+      this.ui.hud.setCameraMode(newMode);
+    }
+
     if (this.isOnline) {
       this.updateOnline(input, dt);
     } else {
       this.updateOffline(input, dt);
     }
 
-    // Camera follow
+    // Camera follow (pass rotation + pitch for shoulder/FPP)
     if (this.player.alive) {
-      this.renderer.followTarget(this.player.x, this.player.y);
+      this.renderer.followTarget(
+        this.player.x, this.player.y,
+        this.player.rotation, input.pitch
+      );
     }
 
     // Update particles

@@ -226,6 +226,18 @@ export class ClientPlayer {
     this.shieldMesh.visible = active;
   }
 
+  setCameraMode(mode) {
+    if (mode === 'fpp') {
+      this.group.visible = false;
+      this.shadow.visible = false;
+    } else {
+      if (this.alive) {
+        this.group.visible = true;
+        this.shadow.visible = true;
+      }
+    }
+  }
+
   setHealTint(active) {
     if (active) {
       const healMat = new THREE.MeshStandardMaterial({

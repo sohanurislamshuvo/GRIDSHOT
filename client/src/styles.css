@@ -255,6 +255,43 @@
   text-shadow: 0 0 4px rgba(255,170,0,0.5);
 }
 
+/* ─── CROSSHAIR (FPP / SHOULDER) ─────────────────────────────── */
+.hud-crosshair {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px; height: 20px;
+  pointer-events: none;
+  z-index: 15;
+  display: none;
+}
+.hud-crosshair::before,
+.hud-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.7);
+}
+.hud-crosshair::before {
+  width: 2px; height: 20px;
+  left: 9px; top: 0;
+}
+.hud-crosshair::after {
+  width: 20px; height: 2px;
+  left: 0; top: 9px;
+}
+
+/* ─── VIEW MODE INDICATOR ────────────────────────────────────── */
+.hud-view-mode {
+  position: absolute;
+  top: 50px; right: 20px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Courier New', monospace;
+  letter-spacing: 2px;
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+
 /* ─── HIT MARKER ─────────────────────────────────────────────── */
 .hud-hitmarker {
   position: absolute;

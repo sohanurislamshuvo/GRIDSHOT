@@ -38,6 +38,8 @@ export class HUD {
           </div>
         </div>
       </div>
+      <div class="hud-crosshair"></div>
+      <div class="hud-view-mode">TPP</div>
       <div class="hud-hitmarker"></div>
       <div class="hud-respawn">RESPAWNING...</div>
       <div class="hud-result"></div>
@@ -54,6 +56,8 @@ export class HUD {
     this._respawnEl = this.el.querySelector('.hud-respawn');
     this._resultEl = this.el.querySelector('.hud-result');
     this._hitmarker = this.el.querySelector('.hud-hitmarker');
+    this._crosshair = this.el.querySelector('.hud-crosshair');
+    this._viewModeEl = this.el.querySelector('.hud-view-mode');
     this._abilityEls = {};
 
     this.el.querySelectorAll('.hud-ability').forEach(el => {
@@ -86,6 +90,13 @@ export class HUD {
 
   setWallGrid(grid) {
     this._wallGrid = grid;
+  }
+
+  setCameraMode(mode) {
+    const labels = { tpp: 'TPP', shoulder: 'SHOULDER', fpp: 'FPP' };
+    this._viewModeEl.textContent = labels[mode] || mode.toUpperCase();
+    // Show crosshair in FPP and shoulder modes
+    this._crosshair.style.display = (mode === 'tpp') ? 'none' : 'block';
   }
 
   show(mode) {

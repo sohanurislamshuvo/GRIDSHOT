@@ -32,7 +32,7 @@ export class MenuScreen {
     if (isMobile) {
       controlsEl.textContent = 'Left Joystick: Move | Right Joystick: Aim + Shoot';
     } else {
-      controlsEl.innerHTML = 'WASD: Move | Mouse: Aim | Click: Shoot<br>Q: Dash | E: Shield | R: Radar | F: Heal';
+      controlsEl.innerHTML = 'WASD: Move | Mouse: Aim | Click: Shoot<br>Q: Dash | E: Shield | R: Radar | F: Heal | V: Switch View';
     }
 
     this.statusEl = this.el.querySelector('.menu-status');

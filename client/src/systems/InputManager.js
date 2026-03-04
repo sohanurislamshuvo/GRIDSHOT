@@ -8,10 +8,16 @@ export class InputManager {
 
     this._keys = {};
     this._mouseAngle = 0;
+    this._mousePitch = 0;  // For FPP vertical look
     this._shooting = false;
     this._abilityQueue = null;
     this._justPressed = {};
     this._escape = false;
+    this._viewToggle = false;
+
+    // Camera mode (set by Game.js)
+    this.cameraMode = 'tpp';
+    this._pointerLocked = false;
 
     // Mobile detection
     this.isMobile = ('ontouchstart' in window)
@@ -37,11 +43,17 @@ export class InputManager {
   _setupKeyboard() {
     const onKeyDown = (e) => {
       this._keys[e.code] = true;
-      // Track just-pressed for abilities
       if (['KeyQ', 'KeyE', 'KeyR', 'KeyF'].includes(e.code)) {
         this._justPressed[e.code] = true;
       }
-      if (e.code === 'Escape') this._escape = true;
+      if (e.code === 'Escape') {
+        this._escape = true;
+        // Exit pointer lock on ESC
+        if (this._pointerLocked) {
+          document.exitPointerLock();
+        }
+      }
+      if (e.code === 'KeyV') this._viewToggle = true;
     };
     const onKeyUp = (e) => {
       this._keys[e.code] = false;
@@ -49,34 +61,56 @@ export class InputManager {
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
+
+    // Pointer lock change handler
+    const onPointerLockChange = () => {
+      this._pointerLocked = document.pointerLockElement === this.canvas;
+    };
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+
     this._cleanupFns = [
       () => document.removeEventListener('keydown', onKeyDown),
-      () => document.removeEventListener('keyup', onKeyUp)
+      () => document.removeEventListener('keyup', onKeyUp),
+      () => document.removeEventListener('pointerlockchange', onPointerLockChange)
     ];
   }
 
   _setupMouse() {
     const onMove = (e) => {
       if (!this.player) return;
-      // Convert mouse to NDC
-      this._mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
-      this._mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-      // Raycast to ground plane
-      this._raycaster.setFromCamera(this._mouseNDC, this.camera);
-      this._raycaster.ray.intersectPlane(this._groundPlane, this._worldPoint);
+      if (this.cameraMode === 'fpp' && this._pointerLocked) {
+        // FPP: use movementX/Y for mouselook
+        const sensitivity = 0.003;
+        this._mouseAngle += e.movementX * sensitivity;
+        this._mousePitch -= e.movementY * sensitivity;
+        // Clamp pitch to prevent flipping
+        this._mousePitch = Math.max(-1.0, Math.min(1.0, this._mousePitch));
+      } else {
+        // TPP / Shoulder: raycaster to ground plane
+        this._mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
+        this._mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-      if (this._worldPoint) {
-        // worldPoint.x = game x, worldPoint.z = game y
-        this._mouseAngle = Math.atan2(
-          this._worldPoint.z - this.player.y,
-          this._worldPoint.x - this.player.x
-        );
+        this._raycaster.setFromCamera(this._mouseNDC, this.camera);
+        this._raycaster.ray.intersectPlane(this._groundPlane, this._worldPoint);
+
+        if (this._worldPoint) {
+          this._mouseAngle = Math.atan2(
+            this._worldPoint.z - this.player.y,
+            this._worldPoint.x - this.player.x
+          );
+        }
       }
     };
 
     const onDown = (e) => {
-      if (e.button === 0) this._shooting = true;
+      if (e.button === 0) {
+        this._shooting = true;
+        // Request pointer lock for FPP mode
+        if (this.cameraMode === 'fpp' && !this._pointerLocked) {
+          this.canvas.requestPointerLock();
+        }
+      }
     };
     const onUp = (e) => {
       if (e.button === 0) this._shooting = false;
@@ -86,7 +120,6 @@ export class InputManager {
     document.addEventListener('mousedown', onDown);
     document.addEventListener('mouseup', onUp);
 
-    // Prevent context menu on canvas
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     this._cleanupFns.push(
@@ -96,7 +129,17 @@ export class InputManager {
     );
   }
 
-  /** Called by mobile UI ability buttons */
+  /** Called when camera mode changes */
+  setCameraMode(mode) {
+    this.cameraMode = mode;
+    if (mode === 'fpp') {
+      // Request pointer lock for FPP
+      this.canvas.requestPointerLock();
+    } else if (this._pointerLocked) {
+      document.exitPointerLock();
+    }
+  }
+
   triggerAbility(name) {
     this._abilityQueue = name;
   }
@@ -116,15 +159,20 @@ export class InputManager {
     const escape = this._escape;
     this._escape = false;
 
+    const viewToggle = this._viewToggle;
+    this._viewToggle = false;
+
     return {
       up: !!this._keys['KeyW'],
       down: !!this._keys['KeyS'],
       left: !!this._keys['KeyA'],
       right: !!this._keys['KeyD'],
       angle: this._mouseAngle,
+      pitch: this._mousePitch,
       shoot: this._shooting,
       ability,
-      escape
+      escape,
+      viewToggle
     };
   }
 
@@ -153,13 +201,16 @@ export class InputManager {
       left: moveX < -threshold,
       right: moveX > threshold,
       angle: aimAngle,
+      pitch: 0,
       shoot: shooting,
       ability,
-      escape: false
+      escape: false,
+      viewToggle: false
     };
   }
 
   destroy() {
+    if (this._pointerLocked) document.exitPointerLock();
     if (this._cleanupFns) {
       for (const fn of this._cleanupFns) fn();
       this._cleanupFns = [];
