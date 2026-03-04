@@ -10,10 +10,14 @@ export class WorldBuilder {
 
     const wallData = generateWallData();
     this.wallGrid = wallData.grid;
+    this.treePositions = []; // exported for collision
 
     this._buildGround();
     this._buildWalls(wallData.wallPositions);
     this._buildProps(wallData.wallPositions);
+    this._buildTrees(wallData.wallPositions);
+    this._buildBushes(wallData.wallPositions);
+    this._buildRocks(wallData.wallPositions);
     this._buildLighting();
   }
 
@@ -154,6 +158,202 @@ export class WorldBuilder {
       this.scene.add(instanced);
       this.objects.push(instanced);
     }
+  }
+
+  _buildTrees(wallPositions) {
+    const ts = GameConfig.TILE_SIZE;
+    const wallSet = new Set(wallPositions.map(wp => `${wp.x},${wp.y}`));
+    const W = GameConfig.WORLD_WIDTH;
+    const H = GameConfig.WORLD_HEIGHT;
+    const gridW = Math.floor(W / ts);
+    const gridH = Math.floor(H / ts);
+
+    // Collect tree positions via deterministic hash
+    const trees = [];
+    const centerX = W / 2, centerY = H / 2;
+    for (let gx = 3; gx < gridW - 3; gx += 4) {
+      for (let gy = 3; gy < gridH - 3; gy += 4) {
+        const hash = ((gx * 92837) ^ (gy * 38491)) >>> 0;
+        if (hash % 11 !== 0) continue;
+        if (wallSet.has(`${gx},${gy}`)) continue;
+        // Avoid center spawn area (200 unit radius)
+        const wx = gx * ts + ts / 2;
+        const wz = gy * ts + ts / 2;
+        const dc = Math.sqrt((wx - centerX) ** 2 + (wz - centerY) ** 2);
+        if (dc < 200) continue;
+
+        const scale = 0.7 + (hash % 60) / 100; // 0.7 to 1.3
+        const ox = ((hash >> 3) % 16) - 8;
+        const oz = ((hash >> 7) % 16) - 8;
+        const tx = wx + ox;
+        const tz = wz + oz;
+        trees.push({ x: tx, z: tz, scale });
+        this.treePositions.push({ x: tx, z: tz, radius: 6 });
+      }
+    }
+
+    if (trees.length === 0) return;
+
+    const trunkGeo = this.assets.getGeometry('treeTrunk');
+    const trunkMat = this.assets.getMaterial('treeTrunk');
+    const canopyGeo1 = this.assets.getGeometry('treeCanopy1');
+    const canopyGeo2 = this.assets.getGeometry('treeCanopy2');
+    const canopyGeo3 = this.assets.getGeometry('treeCanopy3');
+    const canopyMat = this.assets.getMaterial('treeCanopy');
+
+    const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
+    const canopy1Mesh = new THREE.InstancedMesh(canopyGeo1, canopyMat, trees.length);
+    const canopy2Mesh = new THREE.InstancedMesh(canopyGeo2, canopyMat, trees.length);
+    const canopy3Mesh = new THREE.InstancedMesh(canopyGeo3, canopyMat, trees.length);
+    trunkMesh.castShadow = true;
+    canopy1Mesh.castShadow = true;
+    canopy2Mesh.castShadow = true;
+    canopy3Mesh.castShadow = true;
+    trunkMesh.receiveShadow = true;
+
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+
+    for (let i = 0; i < trees.length; i++) {
+      const t = trees[i];
+      const sc = t.scale;
+
+      // Trunk
+      p.set(t.x, 15 * sc, t.z);
+      s.set(sc, sc, sc);
+      m.compose(p, q, s);
+      trunkMesh.setMatrixAt(i, m);
+
+      // Canopy layer 1 (bottom)
+      p.set(t.x, 28 * sc, t.z);
+      m.compose(p, q, s);
+      canopy1Mesh.setMatrixAt(i, m);
+
+      // Canopy layer 2 (middle)
+      p.set(t.x, 38 * sc, t.z);
+      m.compose(p, q, s);
+      canopy2Mesh.setMatrixAt(i, m);
+
+      // Canopy layer 3 (top)
+      p.set(t.x, 46 * sc, t.z);
+      m.compose(p, q, s);
+      canopy3Mesh.setMatrixAt(i, m);
+    }
+
+    trunkMesh.instanceMatrix.needsUpdate = true;
+    canopy1Mesh.instanceMatrix.needsUpdate = true;
+    canopy2Mesh.instanceMatrix.needsUpdate = true;
+    canopy3Mesh.instanceMatrix.needsUpdate = true;
+
+    this.scene.add(trunkMesh, canopy1Mesh, canopy2Mesh, canopy3Mesh);
+    this.objects.push(trunkMesh, canopy1Mesh, canopy2Mesh, canopy3Mesh);
+  }
+
+  _buildBushes(wallPositions) {
+    const ts = GameConfig.TILE_SIZE;
+    const wallSet = new Set(wallPositions.map(wp => `${wp.x},${wp.y}`));
+    const gridW = Math.floor(GameConfig.WORLD_WIDTH / ts);
+    const gridH = Math.floor(GameConfig.WORLD_HEIGHT / ts);
+
+    const bushes = [];
+    for (let gx = 2; gx < gridW - 2; gx += 3) {
+      for (let gy = 2; gy < gridH - 2; gy += 3) {
+        const hash = ((gx * 65537) ^ (gy * 28657)) >>> 0;
+        if (hash % 13 !== 0) continue;
+        if (wallSet.has(`${gx},${gy}`)) continue;
+
+        const ox = ((hash >> 5) % 20) - 10;
+        const oz = ((hash >> 9) % 20) - 10;
+        const scaleX = 0.8 + (hash % 40) / 100;
+        const scaleY = 0.6 + ((hash >> 2) % 50) / 100;
+        const scaleZ = 0.8 + ((hash >> 4) % 40) / 100;
+        bushes.push({
+          x: gx * ts + ts / 2 + ox,
+          z: gy * ts + ts / 2 + oz,
+          sx: scaleX, sy: scaleY, sz: scaleZ
+        });
+      }
+    }
+
+    if (bushes.length === 0) return;
+
+    const geo = this.assets.getGeometry('bush');
+    const mat = this.assets.getMaterial('bush');
+    const mesh = new THREE.InstancedMesh(geo, mat, bushes.length);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+
+    for (let i = 0; i < bushes.length; i++) {
+      const b = bushes[i];
+      p.set(b.x, 3 * b.sy, b.z);
+      s.set(b.sx, b.sy, b.sz);
+      m.compose(p, q, s);
+      mesh.setMatrixAt(i, m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    this.scene.add(mesh);
+    this.objects.push(mesh);
+  }
+
+  _buildRocks(wallPositions) {
+    const ts = GameConfig.TILE_SIZE;
+    const wallSet = new Set(wallPositions.map(wp => `${wp.x},${wp.y}`));
+    const gridW = Math.floor(GameConfig.WORLD_WIDTH / ts);
+    const gridH = Math.floor(GameConfig.WORLD_HEIGHT / ts);
+
+    const rocks = [];
+    for (let gx = 1; gx < gridW - 1; gx += 5) {
+      for (let gy = 1; gy < gridH - 1; gy += 5) {
+        const hash = ((gx * 31337) ^ (gy * 54773)) >>> 0;
+        if (hash % 9 !== 0) continue;
+        if (wallSet.has(`${gx},${gy}`)) continue;
+
+        const ox = ((hash >> 3) % 24) - 12;
+        const oz = ((hash >> 6) % 24) - 12;
+        const scale = 0.6 + (hash % 80) / 100;
+        const rotY = (hash % 628) / 100;
+        const rotX = ((hash >> 10) % 40) / 100 - 0.2;
+        rocks.push({
+          x: gx * ts + ts / 2 + ox,
+          z: gy * ts + ts / 2 + oz,
+          scale, rotY, rotX
+        });
+      }
+    }
+
+    if (rocks.length === 0) return;
+
+    const geo = this.assets.getGeometry('rock');
+    const mat = this.assets.getMaterial('rock');
+    const mesh = new THREE.InstancedMesh(geo, mat, rocks.length);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const euler = new THREE.Euler();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+
+    for (let i = 0; i < rocks.length; i++) {
+      const r = rocks[i];
+      p.set(r.x, 2 * r.scale, r.z);
+      s.set(r.scale, r.scale * 0.7, r.scale);
+      euler.set(r.rotX, r.rotY, 0);
+      q.setFromEuler(euler);
+      m.compose(p, q, s);
+      mesh.setMatrixAt(i, m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    this.scene.add(mesh);
+    this.objects.push(mesh);
   }
 
   _buildLighting() {

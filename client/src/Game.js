@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { Renderer } from './core/Renderer.js';
 import { GameLoop } from './core/GameLoop.js';
 import { AssetManager } from './core/AssetManager.js';
@@ -57,6 +58,11 @@ export class Game {
     // Stats
     this.kills = 0;
     this.deaths = 0;
+
+    // FPS tracking
+    this._fpsFrames = 0;
+    this._fpsLastTime = performance.now();
+    this._fpsDisplay = 0;
 
     // UI
     this.ui = new UIManager(uiRoot, this);
@@ -168,6 +174,21 @@ export class Game {
       this.world.updateLightTarget(this.player.x, this.player.y);
     }
 
+    // FPS counter
+    this._fpsFrames++;
+    const now = performance.now();
+    if (now - this._fpsLastTime >= 1000) {
+      this._fpsDisplay = this._fpsFrames;
+      this._fpsFrames = 0;
+      this._fpsLastTime = now;
+      this.ui.hud.updateFPS(this._fpsDisplay);
+    }
+
+    // Alive count
+    const aliveCount = 1 + this.bots.filter(b => b.alive).length +
+      (this.isOnline ? this.remotePlayers.size : 0);
+    this.ui.hud.updateAliveCount(aliveCount);
+
     // Update UI
     this.ui.updateHUD({
       health: this.player.health,
@@ -251,10 +272,16 @@ export class Game {
         const dz = bullet.y - bot.y;
         const dist = Math.sqrt(dx * dx + dz * dz);
         if (dist < 20) {
-          bot.takeDamage(bullet.damage);
+          const dmg = bullet.damage;
+          bot.takeDamage(dmg);
           bullet.destroy();
           this.ui.hud.showHitMarker();
-          if (!bot.alive) this.kills++;
+          // Damage number
+          this._showDamageAt(bot.x, bot.y, dmg);
+          if (!bot.alive) {
+            this.kills++;
+            this.ui.hud.addKillFeedEntry('You', bot.type || 'Bot', true);
+          }
           break;
         }
       }
@@ -286,6 +313,7 @@ export class Game {
         bullet.destroy();
         if (!this.player.alive) {
           this.deaths++;
+          this.ui.hud.addKillFeedEntry('Bot', 'You', false);
           this.handlePlayerDeath();
         }
       }
@@ -593,6 +621,17 @@ export class Game {
       };
     }
     return cooldowns;
+  }
+
+  // ─── DAMAGE NUMBERS ─────────────────────────────────────────────
+
+  _showDamageAt(worldX, worldY, damage) {
+    const vec = new THREE.Vector3(worldX, 15, worldY);
+    vec.project(this.renderer.camera);
+    if (vec.z > 1) return; // Behind camera
+    const screenX = (vec.x * 0.5 + 0.5) * window.innerWidth;
+    const screenY = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+    this.ui.hud.showDamageNumber(damage, screenX, screenY);
   }
 
   // ─── BOT SPAWNING ───────────────────────────────────────────────

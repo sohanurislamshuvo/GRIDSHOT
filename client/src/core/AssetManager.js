@@ -196,6 +196,42 @@ export class AssetManager {
     this._materials.crate = new THREE.MeshStandardMaterial({ color: 0x554433, roughness: 0.85, metalness: 0.1 });
     this._materials.barrel = new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.6, metalness: 0.4 });
     this._materials.debris = new THREE.MeshStandardMaterial({ color: 0x333338, roughness: 0.9, metalness: 0.1 });
+
+    // ─── TREE GEOMETRIES & MATERIALS ─────────────────────────────
+    // Trunk
+    this._geometries.treeTrunk = new THREE.CylinderGeometry(3, 4, 30, 6);
+    this._materials.treeTrunk = new THREE.MeshStandardMaterial({
+      color: 0x553322, roughness: 0.9, metalness: 0.05
+    });
+
+    // Canopy layers (3 stacked cones for pine tree look)
+    this._geometries.treeCanopy1 = new THREE.ConeGeometry(18, 22, 7); // bottom (widest)
+    this._geometries.treeCanopy2 = new THREE.ConeGeometry(14, 18, 7); // middle
+    this._geometries.treeCanopy3 = new THREE.ConeGeometry(9, 14, 7);  // top
+    this._materials.treeCanopy = new THREE.MeshStandardMaterial({
+      color: 0x1a4a1a, roughness: 0.8, metalness: 0.05,
+      emissive: 0x0a2a0a, emissiveIntensity: 0.15
+    });
+
+    // ─── BUSH GEOMETRY & MATERIAL ────────────────────────────────
+    this._geometries.bush = new THREE.SphereGeometry(6, 6, 5);
+    this._materials.bush = new THREE.MeshStandardMaterial({
+      color: 0x1e5a1e, roughness: 0.85, metalness: 0.05,
+      emissive: 0x0a2a0a, emissiveIntensity: 0.1
+    });
+
+    // ─── ROCK GEOMETRY & MATERIAL ────────────────────────────────
+    this._geometries.rock = new THREE.DodecahedronGeometry(5, 0);
+    this._materials.rock = new THREE.MeshStandardMaterial({
+      color: 0x556060, roughness: 0.95, metalness: 0.1
+    });
+
+    // ─── GRASS PATCH ─────────────────────────────────────────────
+    this._geometries.grassPatch = new THREE.PlaneGeometry(20, 20);
+    this._materials.grassPatch = new THREE.MeshStandardMaterial({
+      color: 0x1a3a1a, roughness: 0.95, metalness: 0.0,
+      transparent: true, opacity: 0.4, side: THREE.DoubleSide
+    });
   }
 
   getMaterial(name) { return this._materials[name]; }

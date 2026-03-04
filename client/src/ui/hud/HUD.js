@@ -10,10 +10,16 @@ export class HUD {
           <div class="hud-health-fill"></div>
         </div>
         <div class="hud-stats">K: 0 | D: 0</div>
+        <div class="hud-fps"></div>
+      </div>
+      <div class="hud-top-center">
+        <div class="hud-alive">ALIVE: --</div>
+        <canvas class="hud-compass" width="200" height="24"></canvas>
       </div>
       <div class="hud-top-right">
         <div class="hud-mode"></div>
       </div>
+      <div class="hud-kill-feed"></div>
       <div class="hud-bottom-center">
         <div class="hud-ability-bar">
           <div class="hud-ability" data-key="dash">
@@ -38,6 +44,10 @@ export class HUD {
           </div>
         </div>
       </div>
+      <div class="hud-bottom-right">
+        <div class="hud-weapon-name">AUTO RIFLE</div>
+        <div class="hud-weapon-ammo">&infin;</div>
+      </div>
       <div class="hud-crosshair"></div>
       <div class="hud-view-mode">TPP</div>
       <div class="hud-hitmarker"></div>
@@ -52,12 +62,17 @@ export class HUD {
     this._healthText = this.el.querySelector('.hud-health-text');
     this._healthFill = this.el.querySelector('.hud-health-fill');
     this._statsText = this.el.querySelector('.hud-stats');
+    this._fpsEl = this.el.querySelector('.hud-fps');
     this._modeText = this.el.querySelector('.hud-mode');
     this._respawnEl = this.el.querySelector('.hud-respawn');
     this._resultEl = this.el.querySelector('.hud-result');
     this._hitmarker = this.el.querySelector('.hud-hitmarker');
     this._crosshair = this.el.querySelector('.hud-crosshair');
     this._viewModeEl = this.el.querySelector('.hud-view-mode');
+    this._aliveEl = this.el.querySelector('.hud-alive');
+    this._killFeedEl = this.el.querySelector('.hud-kill-feed');
+    this._compassCanvas = this.el.querySelector('.hud-compass');
+    this._compassCtx = this._compassCanvas.getContext('2d');
     this._abilityEls = {};
 
     this.el.querySelectorAll('.hud-ability').forEach(el => {
@@ -172,6 +187,9 @@ export class HUD {
       }
     }
 
+    // Compass
+    this._drawCompass(stats.playerAngle);
+
     // Minimap
     this._drawMinimap(stats);
   }
@@ -188,6 +206,122 @@ export class HUD {
     this._radarTimeout = setTimeout(() => {
       this._radarEnemies = null;
     }, duration);
+  }
+
+  // ─── KILL FEED ───────────────────────────────────────────────
+  addKillFeedEntry(killer, victim, isMyKill) {
+    const entry = document.createElement('div');
+    entry.className = 'kill-feed-entry' + (isMyKill ? ' my-kill' : '');
+    entry.innerHTML = `<span class="kf-killer">${killer}</span> <span class="kf-arrow">\u25B8</span> <span class="kf-victim">${victim}</span>`;
+    this._killFeedEl.appendChild(entry);
+
+    // Trigger slide-in
+    requestAnimationFrame(() => entry.classList.add('visible'));
+
+    // Auto-remove after 5s
+    setTimeout(() => {
+      entry.classList.add('fading');
+      setTimeout(() => entry.remove(), 500);
+    }, 5000);
+
+    // Keep max 4 entries
+    while (this._killFeedEl.children.length > 4) {
+      this._killFeedEl.firstChild.remove();
+    }
+  }
+
+  // ─── ALIVE COUNT ─────────────────────────────────────────────
+  updateAliveCount(count) {
+    this._aliveEl.textContent = `ALIVE: ${count}`;
+  }
+
+  // ─── FPS ─────────────────────────────────────────────────────
+  updateFPS(fps) {
+    this._fpsEl.textContent = `FPS: ${fps}`;
+  }
+
+  // ─── DAMAGE NUMBERS ──────────────────────────────────────────
+  showDamageNumber(damage, screenX, screenY) {
+    const el = document.createElement('div');
+    el.className = 'hud-damage-number';
+    el.textContent = `-${damage}`;
+    el.style.left = `${screenX}px`;
+    el.style.top = `${screenY}px`;
+    this.el.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('animate'));
+    setTimeout(() => el.remove(), 800);
+  }
+
+  // ─── COMPASS ─────────────────────────────────────────────────
+  _drawCompass(angle) {
+    const ctx = this._compassCtx;
+    const w = 200, h = 24;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = 'rgba(5, 5, 15, 0.6)';
+    ctx.fillRect(0, 0, w, h);
+
+    const directions = [
+      { label: 'N', angle: -Math.PI / 2 },
+      { label: 'E', angle: 0 },
+      { label: 'S', angle: Math.PI / 2 },
+      { label: 'W', angle: Math.PI },
+    ];
+
+    ctx.font = '11px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const centerAngle = angle || 0;
+    const pixPerRad = w / (Math.PI * 0.8);
+
+    // Draw degree ticks
+    for (let deg = 0; deg < 360; deg += 15) {
+      const rad = (deg * Math.PI) / 180 - Math.PI / 2;
+      let diff = rad - centerAngle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      const px = w / 2 + diff * pixPerRad;
+      if (px < 5 || px > w - 5) continue;
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.beginPath();
+      ctx.moveTo(px, deg % 45 === 0 ? 4 : 8);
+      ctx.lineTo(px, deg % 45 === 0 ? 20 : 16);
+      ctx.stroke();
+    }
+
+    // Draw cardinal directions
+    for (const dir of directions) {
+      let diff = dir.angle - centerAngle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      const px = w / 2 + diff * pixPerRad;
+      if (px < 10 || px > w - 10) continue;
+
+      const isNorth = dir.label === 'N';
+      ctx.fillStyle = isNorth ? '#ff4444' : 'rgba(255, 255, 255, 0.8)';
+      ctx.fillText(dir.label, px, h / 2);
+    }
+
+    // Center marker
+    ctx.strokeStyle = '#4488ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, 0);
+    ctx.lineTo(w / 2, 5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w / 2, h - 5);
+    ctx.lineTo(w / 2, h);
+    ctx.stroke();
+
+    // Border
+    ctx.strokeStyle = 'rgba(68, 136, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, w, h);
   }
 
   _drawMinimap(stats) {
