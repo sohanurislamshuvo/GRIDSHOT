@@ -38,10 +38,11 @@ export class HUD {
           </div>
         </div>
       </div>
+      <div class="hud-hitmarker"></div>
       <div class="hud-respawn">RESPAWNING...</div>
       <div class="hud-result"></div>
       <div class="hud-minimap">
-        <canvas class="minimap-canvas" width="150" height="150"></canvas>
+        <canvas class="minimap-canvas" width="160" height="160"></canvas>
       </div>
     `;
     root.appendChild(this.el);
@@ -52,6 +53,7 @@ export class HUD {
     this._modeText = this.el.querySelector('.hud-mode');
     this._respawnEl = this.el.querySelector('.hud-respawn');
     this._resultEl = this.el.querySelector('.hud-result');
+    this._hitmarker = this.el.querySelector('.hud-hitmarker');
     this._abilityEls = {};
 
     this.el.querySelectorAll('.hud-ability').forEach(el => {
@@ -68,6 +70,7 @@ export class HUD {
     this._minimapCtx = this._minimapCanvas.getContext('2d');
     this._radarEnemies = null;
     this._radarTimeout = null;
+    this._wallGrid = null;
 
     // Mobile labels
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -76,6 +79,13 @@ export class HUD {
         ui.label.textContent = key.toUpperCase();
       }
     }
+
+    // Previous health for damage flash
+    this._prevHealth = 100;
+  }
+
+  setWallGrid(grid) {
+    this._wallGrid = grid;
   }
 
   show(mode) {
@@ -89,13 +99,43 @@ export class HUD {
     this.el.style.display = 'none';
   }
 
+  showHitMarker() {
+    this._hitmarker.classList.add('active');
+    clearTimeout(this._hitmarkerTimeout);
+    this._hitmarkerTimeout = setTimeout(() => {
+      this._hitmarker.classList.remove('active');
+    }, 100);
+  }
+
   update(stats) {
     // Health
     this._healthText.textContent = `HP: ${stats.health}/${stats.maxHealth}`;
     const pct = stats.health / stats.maxHealth;
     this._healthFill.style.width = `${pct * 100}%`;
-    this._healthFill.style.backgroundColor = pct > 0.5 ? '#44ff44' : pct > 0.25 ? '#ffaa00' : '#ff4444';
-    this._healthText.style.color = stats.health > 50 ? '#44ff44' : '#ff4444';
+
+    // Health bar gradient color
+    if (pct > 0.5) {
+      this._healthFill.style.background = 'linear-gradient(90deg, #44ff44, #66ff66)';
+      this._healthFill.style.boxShadow = '0 0 8px rgba(68,255,68,0.3)';
+    } else if (pct > 0.25) {
+      this._healthFill.style.background = 'linear-gradient(90deg, #ff8800, #ffaa00)';
+      this._healthFill.style.boxShadow = '0 0 8px rgba(255,170,0,0.3)';
+    } else {
+      this._healthFill.style.background = 'linear-gradient(90deg, #ff2222, #ff4444)';
+      this._healthFill.style.boxShadow = '0 0 8px rgba(255,68,68,0.4)';
+    }
+    this._healthText.style.color = pct > 0.5 ? '#44ff44' : pct > 0.25 ? '#ffaa00' : '#ff4444';
+
+    // Health bar flash on damage
+    if (stats.health < this._prevHealth) {
+      this._healthFill.style.transition = 'none';
+      this._healthFill.style.filter = 'brightness(2)';
+      setTimeout(() => {
+        this._healthFill.style.transition = 'width 0.15s';
+        this._healthFill.style.filter = 'none';
+      }, 80);
+    }
+    this._prevHealth = stats.health;
 
     // Stats
     this._statsText.textContent = `K: ${stats.kills} | D: ${stats.deaths}`;
@@ -141,28 +181,62 @@ export class HUD {
 
   _drawMinimap(stats) {
     const ctx = this._minimapCtx;
-    const w = 150;
-    const h = 150;
+    const w = 160;
+    const h = 160;
     const worldW = 2000;
     const worldH = 2000;
 
     ctx.clearRect(0, 0, w, h);
 
     // Background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillStyle = 'rgba(5, 5, 15, 0.7)';
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#333';
+
+    // Draw walls if available
+    if (this._wallGrid) {
+      ctx.fillStyle = 'rgba(80, 90, 110, 0.6)';
+      const gridW = this._wallGrid.length;
+      const gridH = this._wallGrid[0]?.length || 0;
+      const cellW = w / gridW;
+      const cellH = h / gridH;
+      for (let gx = 0; gx < gridW; gx++) {
+        for (let gy = 0; gy < gridH; gy++) {
+          if (this._wallGrid[gx][gy]) {
+            ctx.fillRect(gx * cellW, gy * cellH, cellW + 0.5, cellH + 0.5);
+          }
+        }
+      }
+    }
+
+    // Border
+    ctx.strokeStyle = 'rgba(68, 136, 255, 0.3)';
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 0, w, h);
 
-    // Player dot (center-ish based on actual game position)
-    // For now, use a simple fixed approach - could be improved with actual player position
-    const px = w / 2;
-    const py = h / 2;
-    ctx.fillStyle = '#4488ff';
-    ctx.beginPath();
-    ctx.arc(px, py, 3, 0, Math.PI * 2);
-    ctx.fill();
+    // Player position and direction
+    if (stats.playerX !== undefined) {
+      const px = (stats.playerX / worldW) * w;
+      const py = (stats.playerY / worldH) * h;
+
+      // Direction triangle
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(stats.playerAngle || 0);
+      ctx.fillStyle = '#4488ff';
+      ctx.beginPath();
+      ctx.moveTo(5, 0);
+      ctx.lineTo(-3, -3);
+      ctx.lineTo(-3, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // Player glow
+      ctx.fillStyle = 'rgba(68, 136, 255, 0.3)';
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Radar enemies
     if (this._radarEnemies) {
@@ -171,7 +245,12 @@ export class HUD {
         const ey = (enemy.y / worldH) * h;
         ctx.fillStyle = '#ff4444';
         ctx.beginPath();
-        ctx.arc(ex, ey, 2, 0, Math.PI * 2);
+        ctx.arc(ex, ey, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        // Glow
+        ctx.fillStyle = 'rgba(255, 68, 68, 0.3)';
+        ctx.beginPath();
+        ctx.arc(ex, ey, 5, 0, Math.PI * 2);
         ctx.fill();
       }
     }

@@ -1,29 +1,53 @@
 import * as THREE from 'three';
 
-const MAX_PARTICLES = 500;
+const MAX_PARTICLES = 600;
 
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
-    this._particles = [];
 
-    // Use individual small meshes for particles (simple approach)
-    this._pool = [];
-    const geo = new THREE.SphereGeometry(1, 4, 4);
+    // InstancedMesh for all particles (single draw call)
+    const geo = new THREE.SphereGeometry(1, 5, 5);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      depthWrite: false
+    });
+    this._instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_PARTICLES);
+    this._instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this._instancedMesh.frustumCulled = false;
+
+    // Instance colors
+    this._instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(MAX_PARTICLES * 3), 3
+    );
+    this._instancedMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+    // Hide all by default (scale to 0)
+    const hideMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < MAX_PARTICLES; i++) {
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.visible = false;
-      scene.add(mesh);
-      this._pool.push({
-        mesh,
-        mat,
+      this._instancedMesh.setMatrixAt(i, hideMatrix);
+    }
+    this._instancedMesh.instanceMatrix.needsUpdate = true;
+
+    scene.add(this._instancedMesh);
+
+    // Particle data
+    this._particles = new Array(MAX_PARTICLES);
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      this._particles[i] = {
         active: false,
+        x: 0, y: 0, z: 0,
         vx: 0, vy: 0, vz: 0,
         life: 0, maxLife: 1,
-        startSize: 1
-      });
+        startSize: 1,
+        opacity: 1
+      };
     }
+
+    this._matrix = new THREE.Matrix4();
+    this._color = new THREE.Color();
+    this._nextIndex = 0;
   }
 
   emit(x, y, z, options = {}) {
@@ -33,19 +57,20 @@ export class ParticleSystem {
     const lifetime = options.lifetime || 0.5;
     const size = options.size || 2;
 
+    this._color.setHex(color);
+
     for (let i = 0; i < count; i++) {
       const p = this._getAvailable();
       if (!p) break;
 
       p.active = true;
-      p.mesh.visible = true;
-      p.mesh.position.set(x, y, z);
-      p.mesh.scale.set(size, size, size);
-      p.mat.color.setHex(color);
-      p.mat.opacity = 1;
+      p.x = x;
+      p.y = y;
+      p.z = z;
       p.startSize = size;
       p.life = 0;
       p.maxLife = lifetime;
+      p.opacity = 1;
 
       // Random direction
       const angle = Math.random() * Math.PI * 2;
@@ -54,58 +79,92 @@ export class ParticleSystem {
       p.vx = Math.cos(angle) * Math.cos(elevation) * s;
       p.vy = Math.sin(elevation) * s;
       p.vz = Math.sin(angle) * Math.cos(elevation) * s;
+
+      // Set color for this instance
+      this._instancedMesh.setColorAt(p.index, this._color);
+    }
+
+    if (this._instancedMesh.instanceColor) {
+      this._instancedMesh.instanceColor.needsUpdate = true;
     }
   }
 
   update(dt) {
-    for (const p of this._pool) {
+    let anyActive = false;
+
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      const p = this._particles[i];
       if (!p.active) continue;
 
       p.life += dt;
       if (p.life >= p.maxLife) {
         p.active = false;
-        p.mesh.visible = false;
+        // Hide instance
+        this._matrix.makeScale(0, 0, 0);
+        this._instancedMesh.setMatrixAt(i, this._matrix);
+        anyActive = true;
         continue;
       }
 
+      anyActive = true;
       const t = p.life / p.maxLife;
 
       // Move
-      p.mesh.position.x += p.vx * dt;
-      p.mesh.position.y += p.vy * dt;
-      p.mesh.position.z += p.vz * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
 
       // Gravity
       p.vy -= 50 * dt;
 
-      // Fade and shrink
-      p.mat.opacity = 1 - t;
+      // Shrink and fade
       const scale = p.startSize * (1 - t * 0.5);
-      p.mesh.scale.set(scale, scale, scale);
+      p.opacity = 1 - t;
+
+      // Update instance matrix (position + scale)
+      this._matrix.makeScale(scale, scale, scale);
+      this._matrix.setPosition(p.x, p.y, p.z);
+      this._instancedMesh.setMatrixAt(i, this._matrix);
     }
+
+    if (anyActive) {
+      this._instancedMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // Update global opacity via material
+    this._instancedMesh.material.opacity = 1;
   }
 
   _getAvailable() {
-    for (const p of this._pool) {
-      if (!p.active) return p;
+    // Round-robin search
+    for (let j = 0; j < MAX_PARTICLES; j++) {
+      const idx = (this._nextIndex + j) % MAX_PARTICLES;
+      if (!this._particles[idx].active) {
+        this._particles[idx].index = idx;
+        this._nextIndex = (idx + 1) % MAX_PARTICLES;
+        return this._particles[idx];
+      }
     }
-    return null;
+    // Overwrite oldest
+    const idx = this._nextIndex;
+    this._particles[idx].index = idx;
+    this._nextIndex = (idx + 1) % MAX_PARTICLES;
+    return this._particles[idx];
   }
 
   clear() {
-    for (const p of this._pool) {
-      p.active = false;
-      p.mesh.visible = false;
+    const hideMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      this._particles[i].active = false;
+      this._instancedMesh.setMatrixAt(i, hideMatrix);
     }
+    this._instancedMesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose() {
-    for (const p of this._pool) {
-      this.scene.remove(p.mesh);
-      p.mat.dispose();
-    }
-    if (this._pool.length > 0) {
-      this._pool[0].mesh.geometry.dispose();
-    }
+    this.scene.remove(this._instancedMesh);
+    this._instancedMesh.geometry.dispose();
+    this._instancedMesh.material.dispose();
+    this._instancedMesh.dispose();
   }
 }

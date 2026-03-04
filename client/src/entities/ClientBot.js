@@ -44,15 +44,27 @@ export class ClientBot {
     this.group.position.set(x, 0, y);
     this.scene.add(this.group);
 
-    // Shadow
-    const shadowRadius = type === BotType.BOSS ? 24 : 10;
-    const shadowGeo = new THREE.CircleGeometry(shadowRadius, 16);
+    // Soft shadow
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = 64;
+    shadowCanvas.height = 64;
+    const sCtx = shadowCanvas.getContext('2d');
+    const grad = sCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(0,0,0,0.35)');
+    grad.addColorStop(0.7, 'rgba(0,0,0,0.15)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    sCtx.fillStyle = grad;
+    sCtx.fillRect(0, 0, 64, 64);
+    const shadowTex = new THREE.CanvasTexture(shadowCanvas);
+
+    const shadowRadius = type === BotType.BOSS ? 30 : 14;
+    const shadowGeo = new THREE.PlaneGeometry(shadowRadius * 2, shadowRadius * 2);
     const shadowMat = new THREE.MeshBasicMaterial({
-      color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false
+      map: shadowTex, transparent: true, depthWrite: false
     });
     this.shadow = new THREE.Mesh(shadowGeo, shadowMat);
     this.shadow.rotation.x = -Math.PI / 2;
-    this.shadow.position.set(x, 0.5, y);
+    this.shadow.position.set(x, 0.3, y);
     this.scene.add(this.shadow);
 
     // For flash effect
@@ -60,7 +72,12 @@ export class ClientBot {
     this.group.traverse(child => {
       if (child.isMesh) this._originalMaterials.push({ mesh: child, material: child.material });
     });
-    this._flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    this._flashMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.0
+    });
+
+    // Walk animation
+    this._walkPhase = 0;
 
     this._pickWaypoint();
   }
@@ -89,7 +106,6 @@ export class ClientBot {
       this.state = BotState.PATROL;
     }
 
-    // Execute state
     let vx = 0, vy = 0;
     switch (this.state) {
       case BotState.PATROL: {
@@ -131,6 +147,17 @@ export class ClientBot {
 
     this.x += vx * dt;
     this.y += vy * dt;
+
+    // Walk animation
+    const moving = vx !== 0 || vy !== 0;
+    if (moving) {
+      this._walkPhase += dt * 8;
+      const swing = Math.sin(this._walkPhase) * 0.25;
+      const children = this.group.children;
+      if (children[0]) children[0].position.y += swing * 1.5;
+      if (children[1]) children[1].position.y -= swing * 1.5;
+    }
+
     this.syncModel();
   }
 
@@ -144,14 +171,19 @@ export class ClientBot {
     const by = this.y + Math.sin(angle) * gunDist;
 
     // Muzzle flash
-    this.game.particles.emit(bx, 12, by, {
-      count: 2, speed: 30, color: 0xffaa44, lifetime: 0.06, size: 2
+    this.game.particles.emit(bx, 14, by, {
+      count: 3, speed: 40, color: 0xffaa44, lifetime: 0.06, size: 2.5
     });
+
+    // Brief muzzle light
+    const flash = new THREE.PointLight(0xff8844, 1.5, 30);
+    flash.position.set(bx, 14, by);
+    this.scene.add(flash);
+    setTimeout(() => { this.scene.remove(flash); flash.dispose(); }, 40);
 
     this.game.spawnBotBullet(bx, by, angle, this.damage);
   }
 
-  /** Set state from server snapshot (online mode) */
   setServerState(state) {
     this.x = state.x;
     this.y = state.y;
@@ -167,7 +199,7 @@ export class ClientBot {
   syncModel() {
     this.group.position.set(this.x, 0, this.y);
     this.group.rotation.y = -this.rotation + Math.PI / 2;
-    this.shadow.position.set(this.x, 0.5, this.y);
+    this.shadow.position.set(this.x, 0.3, this.y);
   }
 
   takeDamage(amount) {
@@ -177,6 +209,10 @@ export class ClientBot {
       this.die();
     } else {
       this._flashWhite();
+      // Hit sparks
+      this.game.particles.emit(this.x, 15, this.y, {
+        count: 3, speed: 60, color: 0xffaa44, lifetime: 0.15, size: 1.5
+      });
     }
   }
 
@@ -197,11 +233,19 @@ export class ClientBot {
     this.shadow.visible = false;
 
     const color = GameConfig.COLORS[`BOT_${this.type}`] || GameConfig.COLORS.BOT;
+
+    // Multi-layered death effect
     this.game.particles.emit(this.x, 15, this.y, {
-      count: 10, speed: 100, color, lifetime: 0.35, size: 2.5
+      count: 15, speed: 130, color, lifetime: 0.4, size: 3
+    });
+    this.game.particles.emit(this.x, 8, this.y, {
+      count: 8, speed: 60, color: 0xffaa44, lifetime: 0.25, size: 2
+    });
+    // Smoke
+    this.game.particles.emit(this.x, 10, this.y, {
+      count: 6, speed: 30, color: 0x555555, lifetime: 0.6, size: 4
     });
 
-    // Respawn after delay
     setTimeout(() => this.respawn(), GameConfig.PLAYER_RESPAWN_TIME);
   }
 

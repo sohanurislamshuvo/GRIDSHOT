@@ -23,18 +23,21 @@ export class ClientProjectile {
     // Lifetime
     this._createdAt = performance.now();
 
-    // 3D mesh
-    const geo = game.assets.getGeometry('bullet');
+    // 3D mesh — elongated tracer
+    const tracerGeo = game.assets.getGeometry('bulletTracer');
     const mat = isPlayerBullet
       ? game.assets.getMaterial('bulletPlayer')
       : game.assets.getMaterial('bulletBot');
-    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh = new THREE.Mesh(tracerGeo, mat);
     this.mesh.position.set(x, 10, y);
+    // Rotate tracer to align with travel direction
+    this.mesh.rotation.z = Math.PI / 2;
+    this.mesh.rotation.y = -angle + Math.PI / 2;
     this.scene.add(this.mesh);
 
-    // Point light for glow
+    // Point light for glow (brighter for bloom)
     const glowColor = isPlayerBullet ? 0xffff00 : 0xff6666;
-    this.light = new THREE.PointLight(glowColor, 0.5, 60);
+    this.light = new THREE.PointLight(glowColor, 1.0, 50);
     this.light.position.set(x, 10, y);
     this.scene.add(this.light);
   }
@@ -50,11 +53,11 @@ export class ClientProjectile {
     this.mesh.position.set(this.x, 10, this.y);
     this.light.position.set(this.x, 10, this.y);
 
-    // Trail particle
-    if (Math.random() < 0.5) {
+    // Trail particles (more visible tracer effect)
+    if (Math.random() < 0.6) {
       const color = this.isPlayerBullet ? 0xffff88 : 0xff8888;
       this.game.particles.emit(this.x, 10, this.y, {
-        count: 1, speed: 5, color, lifetime: 0.15, size: 1.5
+        count: 1, speed: 8, color, lifetime: 0.12, size: 1.5
       });
     }
 

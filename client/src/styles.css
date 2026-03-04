@@ -7,7 +7,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 17, 17, 0.95);
+  background: linear-gradient(180deg, rgba(5,5,15,0.97) 0%, rgba(10,10,20,0.97) 100%);
   z-index: 50;
 }
 
@@ -17,6 +17,7 @@
   font-family: 'Courier New', monospace;
   font-weight: bold;
   margin-bottom: 8px;
+  text-shadow: 0 0 20px rgba(68,136,255,0.5), 0 0 40px rgba(68,136,255,0.2);
 }
 
 .menu-subtitle {
@@ -45,25 +46,28 @@
 .menu-btn {
   font-size: 20px;
   font-family: 'Courier New', monospace;
-  color: #fff;
-  background: #333;
-  border: none;
+  color: #ccc;
+  background: rgba(30, 30, 50, 0.8);
+  border: 1px solid rgba(68, 136, 255, 0.3);
   padding: 12px 30px;
   cursor: pointer;
   min-width: 260px;
   text-align: center;
-  transition: color 0.15s, background 0.15s;
+  transition: all 0.2s;
+  border-radius: 4px;
 }
 .menu-btn:hover {
-  color: #4488ff;
-  background: #444;
+  color: #fff;
+  background: rgba(40, 50, 80, 0.9);
+  border-color: rgba(68, 136, 255, 0.7);
+  box-shadow: 0 0 15px rgba(68, 136, 255, 0.3);
 }
 
 .menu-controls {
   position: absolute;
   bottom: 40px;
   font-size: 13px;
-  color: #666;
+  color: #555;
   font-family: 'Courier New', monospace;
   text-align: center;
   line-height: 1.6;
@@ -78,7 +82,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 17, 17, 0.9);
+  background: rgba(5, 5, 15, 0.92);
   z-index: 50;
 }
 
@@ -87,6 +91,7 @@
   font-family: 'Courier New', monospace;
   font-weight: bold;
   margin-bottom: 20px;
+  text-shadow: 0 0 30px currentColor;
 }
 
 .gameover-stats {
@@ -116,18 +121,20 @@
 }
 
 .hud-health-text {
-  font-size: 16px;
+  font-size: 15px;
   color: #44ff44;
   font-family: 'Courier New', monospace;
-  text-shadow: 0 0 4px #000;
+  text-shadow: 0 0 6px rgba(0,0,0,0.8);
   margin-bottom: 4px;
+  letter-spacing: 1px;
 }
 
 .hud-health-bar {
-  width: 200px;
-  height: 12px;
-  background: rgba(51, 51, 51, 0.8);
-  border-radius: 2px;
+  width: 220px;
+  height: 14px;
+  background: rgba(20, 20, 30, 0.8);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px;
   overflow: hidden;
   margin-bottom: 6px;
 }
@@ -135,15 +142,17 @@
 .hud-health-fill {
   width: 100%;
   height: 100%;
-  background: #44ff44;
+  background: linear-gradient(90deg, #44ff44, #66ff66);
   transition: width 0.15s;
+  box-shadow: 0 0 8px rgba(68,255,68,0.3);
 }
 
 .hud-stats {
   font-size: 14px;
-  color: #fff;
+  color: #ccc;
   font-family: 'Courier New', monospace;
-  text-shadow: 0 0 3px #000;
+  text-shadow: 0 0 4px #000;
+  letter-spacing: 1px;
 }
 
 .hud-top-right {
@@ -152,10 +161,11 @@
 }
 
 .hud-mode {
-  font-size: 14px;
+  font-size: 13px;
   color: #4488ff;
   font-family: 'Courier New', monospace;
-  text-shadow: 0 0 3px #000;
+  text-shadow: 0 0 8px rgba(68,136,255,0.4);
+  letter-spacing: 2px;
 }
 
 /* ─── ABILITY BAR ────────────────────────────────────────────── */
@@ -169,37 +179,60 @@
 
 .hud-ability-bar {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 .hud-ability {
   position: relative;
-  width: 64px;
-  height: 36px;
-  background: rgba(34, 34, 34, 0.8);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  width: 68px;
+  height: 40px;
+  background: rgba(15, 15, 25, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
-.hud-ability[data-key="dash"]   { border-color: rgba(255, 255, 255, 0.6); }
-.hud-ability[data-key="shield"] { border-color: rgba(68, 170, 255, 0.6); }
-.hud-ability[data-key="radar"]  { border-color: rgba(255, 170, 0, 0.6); }
-.hud-ability[data-key="heal"]   { border-color: rgba(68, 255, 136, 0.6); }
+.hud-ability:not(.on-cooldown) {
+  box-shadow: 0 0 10px rgba(255,255,255,0.1);
+}
+
+.hud-ability[data-key="dash"]:not(.on-cooldown) {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 12px rgba(255,255,255,0.2);
+}
+.hud-ability[data-key="shield"]:not(.on-cooldown) {
+  border-color: rgba(68, 170, 255, 0.7);
+  box-shadow: 0 0 12px rgba(68,170,255,0.3);
+}
+.hud-ability[data-key="radar"]:not(.on-cooldown) {
+  border-color: rgba(255, 170, 0, 0.7);
+  box-shadow: 0 0 12px rgba(255,170,0,0.3);
+}
+.hud-ability[data-key="heal"]:not(.on-cooldown) {
+  border-color: rgba(68, 255, 136, 0.7);
+  box-shadow: 0 0 12px rgba(68,255,136,0.3);
+}
+
+.hud-ability[data-key="dash"].on-cooldown   { border-color: rgba(255, 255, 255, 0.15); }
+.hud-ability[data-key="shield"].on-cooldown { border-color: rgba(68, 170, 255, 0.15); }
+.hud-ability[data-key="radar"].on-cooldown  { border-color: rgba(255, 170, 0, 0.15); }
+.hud-ability[data-key="heal"].on-cooldown   { border-color: rgba(68, 255, 136, 0.15); }
 
 .hud-ability-label {
-  font-size: 11px;
-  color: #fff;
+  font-size: 10px;
+  color: #ddd;
   font-family: 'Courier New', monospace;
   z-index: 2;
   pointer-events: none;
+  letter-spacing: 1px;
 }
 
 .hud-ability.on-cooldown .hud-ability-label {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .hud-ability-cooldown-overlay {
@@ -213,12 +246,40 @@
 
 .hud-ability-cooldown-text {
   position: absolute;
-  font-size: 14px;
+  font-size: 13px;
   color: #ffaa00;
   font-family: 'Courier New', monospace;
   font-weight: bold;
   z-index: 3;
   pointer-events: none;
+  text-shadow: 0 0 4px rgba(255,170,0,0.5);
+}
+
+/* ─── HIT MARKER ─────────────────────────────────────────────── */
+.hud-hitmarker {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px; height: 24px;
+  opacity: 0;
+  transition: opacity 0.05s;
+  pointer-events: none;
+  z-index: 20;
+}
+.hud-hitmarker.active { opacity: 1; }
+.hud-hitmarker::before,
+.hud-hitmarker::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+}
+.hud-hitmarker::before {
+  width: 2px; height: 24px;
+  left: 11px; top: 0;
+}
+.hud-hitmarker::after {
+  width: 24px; height: 2px;
+  left: 0; top: 11px;
 }
 
 /* ─── RESPAWN ────────────────────────────────────────────────── */
@@ -230,8 +291,9 @@
   font-size: 32px;
   color: #ff4444;
   font-family: 'Courier New', monospace;
-  text-shadow: 0 0 6px #000;
+  text-shadow: 0 0 15px rgba(255,68,68,0.5);
   display: none;
+  letter-spacing: 3px;
 }
 
 /* ─── MATCH RESULT ───────────────────────────────────────────── */
@@ -243,8 +305,9 @@
   font-size: 64px;
   font-family: 'Courier New', monospace;
   font-weight: bold;
-  text-shadow: 0 0 8px #000;
+  text-shadow: 0 0 20px currentColor;
   display: none;
+  letter-spacing: 4px;
 }
 
 /* ─── MINIMAP ────────────────────────────────────────────────── */
@@ -256,8 +319,9 @@
 }
 
 .minimap-canvas {
-  border: 1px solid #333;
+  border: 1px solid rgba(68, 136, 255, 0.3);
   border-radius: 4px;
+  background: rgba(5, 5, 15, 0.7);
 }
 
 /* ─── MOBILE ─────────────────────────────────────────────────── */

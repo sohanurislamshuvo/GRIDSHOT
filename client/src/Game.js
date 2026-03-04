@@ -93,6 +93,7 @@ export class Game {
     // Build world
     this.world = new WorldBuilder(this.renderer.scene, this.assets);
     this.collision.setWallGrid(this.world.wallGrid, GameConfig.TILE_SIZE);
+    this.ui.hud.setWallGrid(this.world.wallGrid);
 
     // Create player at center
     const spawnX = GameConfig.WORLD_WIDTH / 2;
@@ -151,6 +152,11 @@ export class Game {
     // Update particles
     this.particles.update(dt);
 
+    // Update light position
+    if (this.world) {
+      this.world.updateLightTarget(this.player.x, this.player.y);
+    }
+
     // Update UI
     this.ui.updateHUD({
       health: this.player.health,
@@ -158,7 +164,10 @@ export class Game {
       kills: this.kills,
       deaths: this.deaths,
       alive: this.player.alive,
-      abilities: this.getAbilityCooldowns()
+      abilities: this.getAbilityCooldowns(),
+      playerX: this.player.x,
+      playerY: this.player.y,
+      playerAngle: this.player.rotation
     });
 
     // Handle ESC
@@ -214,8 +223,12 @@ export class Game {
 
       // Check wall collision
       if (this.collision.isInWall(bullet.x, bullet.y)) {
+        // Spark burst on wall impact
+        this.particles.emit(bullet.x, 10, bullet.y, {
+          count: 6, speed: 100, color: 0xffcc44, lifetime: 0.15, size: 2
+        });
         this.particles.emit(bullet.x, 8, bullet.y, {
-          count: 4, speed: 80, color: 0xffaa44, lifetime: 0.2, size: 2
+          count: 3, speed: 40, color: 0x888888, lifetime: 0.3, size: 3
         });
         bullet.destroy();
         continue;
@@ -229,6 +242,7 @@ export class Game {
         if (dist < 20) {
           bot.takeDamage(bullet.damage);
           bullet.destroy();
+          this.ui.hud.showHitMarker();
           if (!bot.alive) this.kills++;
           break;
         }
@@ -242,8 +256,11 @@ export class Game {
 
       // Check wall collision
       if (this.collision.isInWall(bullet.x, bullet.y)) {
+        this.particles.emit(bullet.x, 10, bullet.y, {
+          count: 6, speed: 100, color: 0xff8844, lifetime: 0.15, size: 2
+        });
         this.particles.emit(bullet.x, 8, bullet.y, {
-          count: 4, speed: 80, color: 0xffaa44, lifetime: 0.2, size: 2
+          count: 3, speed: 40, color: 0x888888, lifetime: 0.3, size: 3
         });
         bullet.destroy();
         continue;
@@ -500,13 +517,16 @@ export class Game {
     const startTime = performance.now();
     const duration = 150;
 
+    let ghostCount = 0;
     const animateDash = () => {
       const elapsed = performance.now() - startTime;
       const t = Math.min(elapsed / duration, 1);
-      const ease = t * (2 - t); // ease out quad
+      const ease = t * (2 - t);
       this.player.x = startX + (targetX - startX) * ease;
       this.player.y = startY + (targetY - startY) * ease;
       this.player.syncModel();
+      // Spawn ghost trail copies
+      if (ghostCount++ % 2 === 0) this.player.spawnDashGhost();
       if (t < 1) requestAnimationFrame(animateDash);
     };
     animateDash();
