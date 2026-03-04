@@ -18,7 +18,7 @@ export class AssetManager {
     const gCtx = groundCanvas.getContext('2d');
 
     // Base concrete color
-    gCtx.fillStyle = '#1a1a1e';
+    gCtx.fillStyle = '#2a2a30';
     gCtx.fillRect(0, 0, 512, 512);
 
     // Noise / grime
@@ -31,7 +31,7 @@ export class AssetManager {
     }
 
     // Subtle grid lines
-    gCtx.strokeStyle = 'rgba(60, 60, 70, 0.3)';
+    gCtx.strokeStyle = 'rgba(80, 80, 90, 0.4)';
     gCtx.lineWidth = 1;
     for (let i = 0; i <= 512; i += 64) {
       gCtx.beginPath(); gCtx.moveTo(i, 0); gCtx.lineTo(i, 512); gCtx.stroke();

@@ -357,18 +357,21 @@ export class WorldBuilder {
   }
 
   _buildLighting() {
-    // Ambient light (cool blue tone)
-    const ambient = new THREE.AmbientLight(0x303050, 0.6);
+    const W = GameConfig.WORLD_WIDTH;
+    const H = GameConfig.WORLD_HEIGHT;
+
+    // Ambient light (brighter)
+    const ambient = new THREE.AmbientLight(0x445566, 0.8);
     this.scene.add(ambient);
     this.objects.push(ambient);
 
-    // Hemisphere light for sky/ground color variation
-    const hemi = new THREE.HemisphereLight(0x334466, 0x111115, 0.4);
+    // Hemisphere light (brighter sky)
+    const hemi = new THREE.HemisphereLight(0x6688aa, 0x222225, 0.6);
     this.scene.add(hemi);
     this.objects.push(hemi);
 
-    // Main directional light (warm sun-like)
-    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+    // Main directional light (warmer, stronger sun)
+    const dirLight = new THREE.DirectionalLight(0xfff0dd, 2.0);
     dirLight.position.set(500, 1000, 500);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 4096;
@@ -386,22 +389,59 @@ export class WorldBuilder {
     this.dirLight = dirLight;
     this.objects.push(dirLight);
 
-    // Accent point lights at map corners
+    // ─── DAY ZONE lights (north half, Z < 1000) ──────────────────
+    const dayLights = [
+      { pos: [500, 100, 400], color: 0xffeebb, intensity: 1.2, range: 1200 },
+      { pos: [1500, 100, 400], color: 0xffeebb, intensity: 1.2, range: 1200 },
+      { pos: [1000, 120, 200], color: 0xffddaa, intensity: 0.8, range: 1000 },
+    ];
+    for (const dl of dayLights) {
+      const light = new THREE.PointLight(dl.color, dl.intensity, dl.range);
+      light.position.set(...dl.pos);
+      this.scene.add(light);
+      this.objects.push(light);
+    }
+
+    // ─── NIGHT ZONE lights (south half, Z > 1000) ────────────────
+    const nightLights = [
+      { pos: [500, 80, 1600], color: 0x4466aa, intensity: 0.8, range: 1000 },
+      { pos: [1500, 80, 1600], color: 0x4466aa, intensity: 0.8, range: 1000 },
+    ];
+    for (const nl of nightLights) {
+      const light = new THREE.PointLight(nl.color, nl.intensity, nl.range);
+      light.position.set(...nl.pos);
+      this.scene.add(light);
+      this.objects.push(light);
+    }
+
+    // Corner accent lights (north bright, south dimmer)
     const cornerLights = [
-      { pos: [200, 60, 200], color: 0x4466ff, intensity: 0.8 },
-      { pos: [GameConfig.WORLD_WIDTH - 200, 60, 200], color: 0xff4444, intensity: 0.6 },
-      { pos: [200, 60, GameConfig.WORLD_HEIGHT - 200], color: 0x44ff88, intensity: 0.6 },
-      { pos: [GameConfig.WORLD_WIDTH - 200, 60, GameConfig.WORLD_HEIGHT - 200], color: 0xffaa22, intensity: 0.6 },
+      { pos: [200, 60, 200], color: 0x4466ff, intensity: 0.8, range: 800 },
+      { pos: [W - 200, 60, 200], color: 0xffaa44, intensity: 0.8, range: 800 },
+      { pos: [200, 60, H - 200], color: 0x44ff88, intensity: 0.4, range: 600 },
+      { pos: [W - 200, 60, H - 200], color: 0x6644aa, intensity: 0.4, range: 600 },
     ];
     for (const cl of cornerLights) {
-      const light = new THREE.PointLight(cl.color, cl.intensity, 800);
+      const light = new THREE.PointLight(cl.color, cl.intensity, cl.range);
       light.position.set(...cl.pos);
       this.scene.add(light);
       this.objects.push(light);
     }
 
-    // Atmospheric fog
-    this.scene.fog = new THREE.FogExp2(0x0a0a0f, 0.00035);
+    // ─── DAY ZONE ground overlay (warm tint on north half) ───────
+    const dayOverlayGeo = new THREE.PlaneGeometry(W, H / 2);
+    const dayOverlayMat = new THREE.MeshStandardMaterial({
+      color: 0x3a3520, transparent: true, opacity: 0.15,
+      roughness: 1, metalness: 0, side: THREE.DoubleSide, depthWrite: false
+    });
+    const dayOverlay = new THREE.Mesh(dayOverlayGeo, dayOverlayMat);
+    dayOverlay.rotation.x = -Math.PI / 2;
+    dayOverlay.position.set(W / 2, 0.1, H / 4);
+    this.scene.add(dayOverlay);
+    this.objects.push(dayOverlay);
+
+    // Atmospheric fog (lighter, matches background)
+    this.scene.fog = new THREE.FogExp2(0x1a2a3a, 0.00025);
   }
 
   updateLightTarget(x, z) {

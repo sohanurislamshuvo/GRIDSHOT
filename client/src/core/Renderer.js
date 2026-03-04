@@ -15,7 +15,7 @@ export class Renderer {
 
     // Three.js scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0a0f);
+    this.scene.background = new THREE.Color(0x1a2a3a);
 
     // Perspective camera
     const aspect = window.innerWidth / window.innerHeight;
@@ -30,7 +30,7 @@ export class Renderer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.3;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
