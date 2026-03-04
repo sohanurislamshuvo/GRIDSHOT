@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
 import { NetworkManager } from '../systems/NetworkManager.js';
 
 export class MenuScene extends Phaser.Scene {
@@ -8,8 +7,11 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create() {
-    const cx = GameConfig.VIEW_WIDTH / 2;
-    const cy = GameConfig.VIEW_HEIGHT / 2;
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
+    const isMobile = ('ontouchstart' in window)
+      || (navigator.maxTouchPoints > 0)
+      || (window.innerWidth < 1024 && 'orientation' in window);
 
     // Title
     this.add.text(cx, 80, 'SHADOW ARENA', {
@@ -25,10 +27,11 @@ export class MenuScene extends Phaser.Scene {
       fontSize: '14px', fill: '#ffaa00', fontFamily: 'monospace'
     }).setOrigin(0.5);
 
-    // Menu buttons
+    // Menu buttons (larger padding on mobile)
     const btnStyle = {
       fontSize: '22px', fill: '#ffffff', fontFamily: 'monospace',
-      backgroundColor: '#333333', padding: { x: 30, y: 12 }
+      backgroundColor: '#333333',
+      padding: isMobile ? { x: 40, y: 18 } : { x: 30, y: 12 }
     };
 
     this.createButton(cx, cy - 60, 'SOLO MISSION', btnStyle, () => {
@@ -47,14 +50,20 @@ export class MenuScene extends Phaser.Scene {
       this.startOnlineMode('team3v3');
     });
 
-    // Controls info
-    this.add.text(cx, GameConfig.VIEW_HEIGHT - 60, 'WASD: Move | Mouse: Aim | Click: Shoot', {
-      fontSize: '14px', fill: '#666666', fontFamily: 'monospace'
-    }).setOrigin(0.5);
+    // Controls info (device-appropriate hints)
+    if (isMobile) {
+      this.add.text(cx, this.scale.height - 50, 'Left Joystick: Move | Right Joystick: Aim + Shoot', {
+        fontSize: '13px', fill: '#666666', fontFamily: 'monospace'
+      }).setOrigin(0.5);
+    } else {
+      this.add.text(cx, this.scale.height - 60, 'WASD: Move | Mouse: Aim | Click: Shoot', {
+        fontSize: '14px', fill: '#666666', fontFamily: 'monospace'
+      }).setOrigin(0.5);
 
-    this.add.text(cx, GameConfig.VIEW_HEIGHT - 35, 'Q: Dash | E: Shield | R: Radar | F: Heal', {
-      fontSize: '14px', fill: '#666666', fontFamily: 'monospace'
-    }).setOrigin(0.5);
+      this.add.text(cx, this.scale.height - 35, 'Q: Dash | E: Shield | R: Radar | F: Heal', {
+        fontSize: '14px', fill: '#666666', fontFamily: 'monospace'
+      }).setOrigin(0.5);
+    }
   }
 
   createButton(x, y, label, style, onClick) {

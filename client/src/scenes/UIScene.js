@@ -12,6 +12,13 @@ export class UIScene extends Phaser.Scene {
   }
 
   create() {
+    // Detect mobile via InputManager
+    this._isMobile = this.gameScene?.inputManager?.isMobile || false;
+
+    // Use actual screen dimensions (works with EXPAND scale mode)
+    const sw = this.scale.width;
+    const sh = this.scale.height;
+
     // Health display
     this.healthText = this.add.text(20, 20, 'HP: 100/100', {
       fontSize: '16px',
@@ -33,8 +40,8 @@ export class UIScene extends Phaser.Scene {
       strokeThickness: 2
     }).setScrollFactor(0).setDepth(100);
 
-    // Mode display
-    this.modeText = this.add.text(GameConfig.VIEW_WIDTH - 20, 20, this.gameMode.toUpperCase(), {
+    // Mode display (top-right)
+    this.modeText = this.add.text(sw - 20, 20, this.gameMode.toUpperCase(), {
       fontSize: '14px',
       fill: '#4488ff',
       fontFamily: 'monospace',
@@ -46,10 +53,10 @@ export class UIScene extends Phaser.Scene {
     this.abilityIcons = {};
     this.createAbilityBar();
 
-    // Respawn text (hidden by default)
+    // Respawn text (center)
     this.respawnText = this.add.text(
-      GameConfig.VIEW_WIDTH / 2,
-      GameConfig.VIEW_HEIGHT / 2 - 50,
+      sw / 2,
+      sh / 2 - 50,
       'RESPAWNING...',
       {
         fontSize: '32px',
@@ -67,38 +74,54 @@ export class UIScene extends Phaser.Scene {
       this.gameScene.events.on('radarActivated', this.onRadarActivated, this);
     }
 
-    // ESC hint
-    this.add.text(GameConfig.VIEW_WIDTH - 20, GameConfig.VIEW_HEIGHT - 25, 'ESC: Menu', {
-      fontSize: '12px',
-      fill: '#555555',
-      fontFamily: 'monospace'
-    }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(100);
+    // Menu hint / pause button
+    if (this._isMobile) {
+      this.createPauseButton();
+    } else {
+      this.add.text(sw - 20, sh - 25, 'ESC: Menu', {
+        fontSize: '12px',
+        fill: '#555555',
+        fontFamily: 'monospace'
+      }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(100);
+    }
   }
 
   createAbilityBar() {
-    const abilities = [
+    const sw = this.scale.width;
+    const sh = this.scale.height;
+
+    const abilities = this._isMobile ? [
+      { key: 'dash', label: 'DASH', color: GameConfig.COLORS.DASH },
+      { key: 'shield', label: 'SHIELD', color: GameConfig.COLORS.SHIELD },
+      { key: 'radar', label: 'RADAR', color: GameConfig.COLORS.RADAR },
+      { key: 'heal', label: 'HEAL', color: GameConfig.COLORS.HEAL }
+    ] : [
       { key: 'dash', label: 'Q DASH', color: GameConfig.COLORS.DASH },
       { key: 'shield', label: 'E SHIELD', color: GameConfig.COLORS.SHIELD },
       { key: 'radar', label: 'R RADAR', color: GameConfig.COLORS.RADAR },
       { key: 'heal', label: 'F HEAL', color: GameConfig.COLORS.HEAL }
     ];
 
-    const startX = GameConfig.VIEW_WIDTH / 2 - (abilities.length * 80) / 2;
-    const y = GameConfig.VIEW_HEIGHT - 50;
+    const btnW = this._isMobile ? 72 : 64;
+    const btnH = this._isMobile ? 44 : 36;
+    const spacing = this._isMobile ? 84 : 80;
+    const y = this._isMobile ? sh - 170 : sh - 50;
+    const startX = sw / 2 - (abilities.length * spacing) / 2;
 
     abilities.forEach((ability, i) => {
-      const x = startX + i * 80 + 40;
+      const x = startX + i * spacing + spacing / 2;
 
       // Background box
       const bg = this.add.graphics().setScrollFactor(0).setDepth(100);
       bg.fillStyle(0x222222, 0.8);
-      bg.fillRoundedRect(x - 32, y - 18, 64, 36, 6);
+      bg.fillRoundedRect(x - btnW / 2, y - btnH / 2, btnW, btnH, 6);
       bg.lineStyle(2, ability.color, 0.6);
-      bg.strokeRoundedRect(x - 32, y - 18, 64, 36, 6);
+      bg.strokeRoundedRect(x - btnW / 2, y - btnH / 2, btnW, btnH, 6);
 
       // Label
+      const fontSize = this._isMobile ? '12px' : '11px';
       const label = this.add.text(x, y, ability.label, {
-        fontSize: '11px',
+        fontSize,
         fill: '#ffffff',
         fontFamily: 'monospace'
       }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
@@ -115,16 +138,75 @@ export class UIScene extends Phaser.Scene {
         fontStyle: 'bold'
       }).setOrigin(0.5).setScrollFactor(0).setDepth(103);
 
-      this.abilityIcons[ability.key] = { bg, label, overlay, cdText, x, y, color: ability.color };
+      const iconData = { bg, label, overlay, cdText, x, y, color: ability.color, btnW, btnH };
+
+      // On mobile: make ability buttons interactive (tappable)
+      if (this._isMobile) {
+        const hitArea = this.add.rectangle(x, y, btnW, btnH)
+          .setScrollFactor(0)
+          .setDepth(104)
+          .setAlpha(0.001)
+          .setInteractive();
+
+        hitArea.on('pointerdown', () => {
+          if (this.gameScene?.inputManager) {
+            this.gameScene.inputManager.triggerAbility(ability.key);
+          }
+          bg.clear();
+          bg.fillStyle(0x444444, 0.9);
+          bg.fillRoundedRect(x - btnW / 2, y - btnH / 2, btnW, btnH, 6);
+          bg.lineStyle(2, ability.color, 1);
+          bg.strokeRoundedRect(x - btnW / 2, y - btnH / 2, btnW, btnH, 6);
+
+          this.time.delayedCall(150, () => {
+            bg.clear();
+            bg.fillStyle(0x222222, 0.8);
+            bg.fillRoundedRect(x - btnW / 2, y - btnH / 2, btnW, btnH, 6);
+            bg.lineStyle(2, ability.color, 0.6);
+            bg.strokeRoundedRect(x - btnW / 2, y - btnH / 2, btnW, btnH, 6);
+          });
+        });
+
+        iconData.hitArea = hitArea;
+      }
+
+      this.abilityIcons[ability.key] = iconData;
+    });
+  }
+
+  createPauseButton() {
+    const sw = this.scale.width;
+    const btnX = sw - 30;
+    const btnY = 50;
+
+    const pauseBg = this.add.graphics().setScrollFactor(0).setDepth(100);
+    pauseBg.fillStyle(0x222222, 0.8);
+    pauseBg.fillRoundedRect(btnX - 20, btnY - 15, 40, 30, 4);
+    pauseBg.lineStyle(1, 0x666666, 0.6);
+    pauseBg.strokeRoundedRect(btnX - 20, btnY - 15, 40, 30, 4);
+
+    const pauseIcon = this.add.graphics().setScrollFactor(0).setDepth(101);
+    pauseIcon.fillStyle(0xffffff, 0.8);
+    pauseIcon.fillRect(btnX - 7, btnY - 8, 5, 16);
+    pauseIcon.fillRect(btnX + 2, btnY - 8, 5, 16);
+
+    const hitArea = this.add.rectangle(btnX, btnY, 50, 40)
+      .setScrollFactor(0)
+      .setDepth(102)
+      .setAlpha(0.001)
+      .setInteractive();
+
+    hitArea.on('pointerdown', () => {
+      if (this.gameScene?.returnToMenu) {
+        this.gameScene.returnToMenu();
+      }
     });
   }
 
   updateStats(stats) {
-    // Update health text
     this.healthText.setText(`HP: ${stats.health}/${stats.maxHealth}`);
     this.healthText.setFill(stats.health > 50 ? '#44ff44' : '#ff4444');
 
-    // Update health bar
     this.healthBarGfx.clear();
     const barW = 200;
     const barH = 12;
@@ -139,10 +221,7 @@ export class UIScene extends Phaser.Scene {
     this.healthBarGfx.fillStyle(color, 1);
     this.healthBarGfx.fillRect(barX, barY, barW * pct, barH);
 
-    // Stats text
     this.statsText.setText(`K: ${stats.kills} | D: ${stats.deaths}`);
-
-    // Respawn text
     this.respawnText.setVisible(!stats.alive);
   }
 
@@ -151,7 +230,6 @@ export class UIScene extends Phaser.Scene {
   }
 
   onRadarActivated(data) {
-    // Flash radar indicator
     const radarIcon = this.abilityIcons.radar;
     if (radarIcon) {
       radarIcon.label.setColor('#ffaa00');
@@ -162,7 +240,6 @@ export class UIScene extends Phaser.Scene {
   }
 
   update() {
-    // Update ability cooldown displays
     if (!this.gameScene || !this.gameScene.getAbilityCooldowns) return;
 
     const cooldowns = this.gameScene.getAbilityCooldowns();
@@ -179,7 +256,7 @@ export class UIScene extends Phaser.Scene {
         icon.overlay.clear();
         icon.overlay.fillStyle(0x000000, 0.6);
         const remainPct = cd.remaining / cd.total;
-        icon.overlay.fillRect(icon.x - 32, icon.y - 18, 64 * remainPct, 36);
+        icon.overlay.fillRect(icon.x - icon.btnW / 2, icon.y - icon.btnH / 2, icon.btnW * remainPct, icon.btnH);
 
         const secs = Math.ceil(cd.remaining / 1000);
         icon.cdText.setText(`${secs}s`);

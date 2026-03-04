@@ -8,7 +8,7 @@ export class ClientProjectile {
 
     const texture = isPlayerBullet ? 'bullet_player' : 'bullet_bot';
     this.sprite = scene.physics.add.sprite(x, y, texture);
-    this.sprite.setCircle(4);
+    this.sprite.setCircle(6);
     this.sprite.setDepth(5);
     this.sprite.setRotation(angle);
 
@@ -23,6 +23,19 @@ export class ClientProjectile {
     this.isPlayerBullet = isPlayerBullet;
     this.damage = isPlayerBullet ? GameConfig.BULLET_DAMAGE : GameConfig.BOT_DAMAGE;
     this.alive = true;
+
+    // Trailing particle emitter
+    const trailColor = isPlayerBullet ? 0xffff88 : 0xff8888;
+    this.trail = scene.add.particles(0, 0, 'particle_white', {
+      speed: 0,
+      scale: { start: 0.5, end: 0 },
+      alpha: { start: 0.5, end: 0 },
+      lifespan: 150,
+      tint: trailColor,
+      frequency: 20,
+      follow: this.sprite,
+    });
+    this.trail.setDepth(4);
   }
 
   update() {
@@ -42,6 +55,17 @@ export class ClientProjectile {
   destroy() {
     if (!this.alive) return;
     this.alive = false;
+
+    if (this.trail) {
+      this.trail.stop();
+      this.scene.time.delayedCall(200, () => {
+        if (this.trail) {
+          this.trail.destroy();
+          this.trail = null;
+        }
+      });
+    }
+
     this.sprite.destroy();
   }
 }

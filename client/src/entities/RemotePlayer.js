@@ -9,9 +9,14 @@ export class RemotePlayer {
     this.id = id;
     this.team = team;
 
-    // Create sprite
+    // Drop shadow
+    this.shadow = scene.add.sprite(x, y, 'shadow');
+    this.shadow.setDepth(8);
+    this.shadow.setAlpha(0.35);
+
+    // Create sprite (uses new 48x48 player texture)
     this.sprite = scene.physics.add.sprite(x, y, 'player');
-    this.sprite.setCircle(16);
+    this.sprite.setCircle(20, 4, 4);
     this.sprite.setDepth(9);
 
     // Tint based on team
@@ -20,7 +25,7 @@ export class RemotePlayer {
     } else if (team === 'blue') {
       this.sprite.setTint(0x6666ff);
     } else {
-      this.sprite.setTint(0xff8800); // Orange for enemy in duel
+      this.sprite.setTint(0xff8800);
     }
 
     // Health bar
@@ -51,12 +56,10 @@ export class RemotePlayer {
       shieldActive: state.shieldActive
     });
 
-    // Keep only recent snapshots
     if (this.positionBuffer.length > 10) {
       this.positionBuffer.shift();
     }
 
-    // Update non-interpolated state
     this.health = state.health;
     this.maxHealth = state.maxHealth;
     this.alive = state.alive;
@@ -64,6 +67,7 @@ export class RemotePlayer {
 
     this.sprite.setVisible(this.alive);
     this.sprite.body.enable = this.alive;
+    this.shadow.setVisible(this.alive);
     this.shieldSprite.setVisible(this.alive && this.shieldActive);
   }
 
@@ -72,7 +76,6 @@ export class RemotePlayer {
 
     const renderTime = Date.now() - INTERPOLATION_DELAY;
 
-    // Find two snapshots to interpolate between
     let previous = null;
     let target = null;
 
@@ -86,12 +89,10 @@ export class RemotePlayer {
     }
 
     if (!previous || !target) {
-      // Use latest position if we can't interpolate
       const latest = this.positionBuffer[this.positionBuffer.length - 1];
       this.sprite.setPosition(latest.x, latest.y);
       this.sprite.setRotation(latest.rotation);
     } else {
-      // Linear interpolation
       const timeDiff = target.timestamp - previous.timestamp;
       const elapsed = renderTime - previous.timestamp;
       const t = timeDiff > 0 ? elapsed / timeDiff : 0;
@@ -105,6 +106,9 @@ export class RemotePlayer {
       this.sprite.setRotation(rotation);
     }
 
+    // Update shadow position
+    this.shadow.setPosition(this.sprite.x, this.sprite.y + 4);
+
     // Update shield position
     if (this.shieldActive) {
       this.shieldSprite.setPosition(this.sprite.x, this.sprite.y);
@@ -117,23 +121,40 @@ export class RemotePlayer {
     this.healthBar.clear();
     if (!this.alive) return;
 
-    const barWidth = 32;
-    const barHeight = 4;
+    const barWidth = 36;
+    const barHeight = 5;
     const x = this.sprite.x - barWidth / 2;
-    const y = this.sprite.y - 24;
+    const y = this.sprite.y - 30;
 
-    this.healthBar.fillStyle(GameConfig.COLORS.HEALTH_BG, 0.8);
-    this.healthBar.fillRect(x, y, barWidth, barHeight);
+    // Border
+    this.healthBar.fillStyle(0x000000, 0.9);
+    this.healthBar.fillRoundedRect(x - 1, y - 1, barWidth + 2, barHeight + 2, 2);
 
+    // Background
+    this.healthBar.fillStyle(GameConfig.COLORS.HEALTH_BG, 0.9);
+    this.healthBar.fillRoundedRect(x, y, barWidth, barHeight, 2);
+
+    // Health fill
     const pct = this.health / this.maxHealth;
-    const color = pct > 0.5 ? GameConfig.COLORS.HEALTH_GREEN : GameConfig.COLORS.HEALTH_RED;
-    this.healthBar.fillStyle(color, 1);
-    this.healthBar.fillRect(x, y, barWidth * pct, barHeight);
+    let color;
+    if (pct > 0.6) color = GameConfig.COLORS.HEALTH_GREEN;
+    else if (pct > 0.3) color = GameConfig.COLORS.HEALTH_YELLOW;
+    else color = GameConfig.COLORS.HEALTH_RED;
+
+    if (pct > 0) {
+      this.healthBar.fillStyle(color, 1);
+      this.healthBar.fillRoundedRect(x, y, barWidth * pct, barHeight, 2);
+    }
+
+    // Highlight shine
+    this.healthBar.fillStyle(0xffffff, 0.2);
+    this.healthBar.fillRect(x + 1, y + 1, Math.max(0, barWidth * pct - 2), 1);
   }
 
   destroy() {
     this.sprite.destroy();
     this.healthBar.destroy();
     this.shieldSprite.destroy();
+    this.shadow.destroy();
   }
 }

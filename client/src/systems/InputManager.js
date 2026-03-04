@@ -1,3 +1,7 @@
+import Phaser from 'phaser';
+import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
+import { VirtualJoystick } from '../ui/VirtualJoystick.js';
+
 export class InputManager {
   constructor(scene) {
     this.scene = scene;
@@ -6,8 +10,20 @@ export class InputManager {
     this.shooting = false;
     this.abilityPressed = null;
 
-    this.setupKeys();
-    this.setupMouse();
+    // Mobile detection (with screen-width fallback for emulators)
+    this.isMobile = ('ontouchstart' in window)
+      || (navigator.maxTouchPoints > 0)
+      || (window.innerWidth < 1024 && 'orientation' in window);
+
+    // Touch ability trigger (set by UIScene ability buttons)
+    this._touchAbility = null;
+
+    if (this.isMobile) {
+      this.setupMobileControls();
+    } else {
+      this.setupKeys();
+      this.setupMouse();
+    }
   }
 
   setupKeys() {
@@ -42,21 +58,56 @@ export class InputManager {
     });
   }
 
+  setupMobileControls() {
+    // Use actual screen dimensions (works with EXPAND scale mode)
+    const vw = this.scene.scale.width;
+    const vh = this.scene.scale.height;
+
+    // Left joystick (movement) - bottom-left
+    this.moveJoystick = new VirtualJoystick(this.scene, 100, vh - 100, {
+      baseRadius: 50,
+      thumbRadius: 20,
+      baseColor: 0xffffff,
+      thumbColor: 0x4488ff,
+      baseAlpha: 0.25,
+      thumbAlpha: 0.5,
+    });
+
+    // Right joystick (aim+shoot) - bottom-right
+    this.aimJoystick = new VirtualJoystick(this.scene, vw - 100, vh - 100, {
+      baseRadius: 50,
+      thumbRadius: 20,
+      baseColor: 0xffffff,
+      thumbColor: 0xff4444,
+      baseAlpha: 0.25,
+      thumbAlpha: 0.5,
+    });
+  }
+
   updateMouseAngle(pointer) {
     const player = this.scene.player;
     if (!player || !player.sprite) return;
 
-    // Get world position of pointer
     const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
-
     this.mouseAngle = Phaser.Math.Angle.Between(
       player.sprite.x, player.sprite.y,
       worldPoint.x, worldPoint.y
     );
   }
 
+  /** Called by UIScene ability buttons on mobile */
+  triggerAbility(name) {
+    this._touchAbility = name;
+  }
+
   getInput() {
-    // Check ability key presses (just pressed, not held)
+    if (this.isMobile) {
+      return this.getMobileInput();
+    }
+    return this.getDesktopInput();
+  }
+
+  getDesktopInput() {
     let ability = null;
     if (Phaser.Input.Keyboard.JustDown(this.keys.dash)) ability = 'dash';
     else if (Phaser.Input.Keyboard.JustDown(this.keys.shield)) ability = 'shield';
@@ -74,11 +125,36 @@ export class InputManager {
     };
   }
 
+  getMobileInput() {
+    // Movement from left joystick
+    const moveDir = this.moveJoystick.getDirection();
+    const threshold = 0.3;
+
+    // Aim from right joystick
+    const aimActive = this.aimJoystick.isActive();
+    const aimAngle = aimActive ? this.aimJoystick.getAngle() : this.mouseAngle;
+
+    // Read and consume touch ability
+    const ability = this._touchAbility;
+    this._touchAbility = null;
+
+    return {
+      up: moveDir.y < -threshold,
+      down: moveDir.y > threshold,
+      left: moveDir.x < -threshold,
+      right: moveDir.x > threshold,
+      angle: aimAngle,
+      shoot: aimActive,
+      ability: ability
+    };
+  }
+
   destroy() {
-    this.scene.input.keyboard.removeAllKeys(true);
+    if (!this.isMobile) {
+      this.scene.input.keyboard.removeAllKeys(true);
+    }
     this.scene.input.removeAllListeners();
+    if (this.moveJoystick) this.moveJoystick.destroy();
+    if (this.aimJoystick) this.aimJoystick.destroy();
   }
 }
-
-// Need Phaser to be available for keyboard keycodes
-import Phaser from 'phaser';

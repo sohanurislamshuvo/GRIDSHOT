@@ -414,7 +414,10 @@ export class GameScene extends Phaser.Scene {
           const bullet = new ClientProjectile(this, bulletData.x, bulletData.y, bulletData.angle, true);
           this.playerBullets.push(bullet);
           if (this.wallLayer) {
-            this.physics.add.collider(bullet.sprite, this.wallLayer, () => bullet.destroy());
+            this.physics.add.collider(bullet.sprite, this.wallLayer, () => {
+              this.spawnWallSparks(bullet.sprite.x, bullet.sprite.y);
+              bullet.destroy();
+            });
           }
         }
       }
@@ -477,6 +480,7 @@ export class GameScene extends Phaser.Scene {
       const tx = Math.floor(bullet.sprite.x / GameConfig.TILE_SIZE);
       const ty = Math.floor(bullet.sprite.y / GameConfig.TILE_SIZE);
       if (this.wallData && this.wallData[ty] && this.wallData[ty][tx] !== -1) {
+        this.spawnWallSparks(bullet.sprite.x, bullet.sprite.y);
         bullet.destroy();
       }
     }
@@ -586,6 +590,62 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(GameConfig.PLAYER_RESPAWN_TIME, () => {
       this.player.respawn(GameConfig.WORLD_WIDTH / 2, GameConfig.WORLD_HEIGHT / 2);
     });
+  }
+
+  // ─── VISUAL EFFECTS ─────────────────────────────────────────────
+
+  spawnMuzzleFlash(x, y) {
+    const flash = this.add.sprite(x, y, 'muzzle_flash');
+    flash.setDepth(15);
+    flash.setAlpha(0.9);
+    flash.setScale(1.5);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 0.5,
+      duration: 80,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
+  spawnDeathExplosion(x, y, tintColor) {
+    const particles = this.add.particles(x, y, 'particle_white', {
+      speed: { min: 60, max: 160 },
+      scale: { start: 1.5, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: { min: 200, max: 500 },
+      tint: tintColor,
+      quantity: 12,
+      emitting: false,
+    });
+    particles.setDepth(15);
+    particles.explode(12);
+    this.time.delayedCall(600, () => particles.destroy());
+
+    const flash = this.add.rectangle(x, y, 40, 40, 0xffffff, 0.5).setDepth(16);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 2,
+      scaleY: 2,
+      duration: 150,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
+  spawnWallSparks(x, y) {
+    const particles = this.add.particles(x, y, 'particle_white', {
+      speed: { min: 20, max: 80 },
+      scale: { start: 0.6, end: 0 },
+      alpha: { start: 0.8, end: 0 },
+      lifespan: 200,
+      tint: 0xffaa44,
+      quantity: 4,
+      emitting: false,
+    });
+    particles.setDepth(15);
+    particles.explode(4);
+    this.time.delayedCall(300, () => particles.destroy());
   }
 
   // ─── CLEANUP ─────────────────────────────────────────────────────
