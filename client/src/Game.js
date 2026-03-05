@@ -11,11 +11,19 @@ import { ClientBot } from './entities/ClientBot.js';
 import { ClientProjectile } from './entities/ClientProjectile.js';
 import { RemotePlayer } from './entities/RemotePlayer.js';
 import { ParticleSystem } from './effects/ParticleSystem.js';
+import { ProjectilePool } from './effects/ProjectilePool.js';
 import { UIManager } from './ui/UIManager.js';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
+import { getMapConfig } from 'shadow-arena-shared/config/MapConfig.js';
+import { WeaponType } from 'shadow-arena-shared/config/WeaponConfig.js';
+import { MessageTypes } from 'shadow-arena-shared/utils/MessageTypes.js';
 import { BotType } from 'shadow-arena-shared/entities/BotEntity.js';
+import { PickupType, PickupConfig } from 'shadow-arena-shared/entities/PickupEntity.js';
+import { DestructibleType, DestructibleConfig } from 'shadow-arena-shared/entities/DestructibleEntity.js';
+import { TrailConfig } from 'shadow-arena-shared/config/CosmeticConfig.js';
+import { ClientPickup } from './entities/ClientPickup.js';
 
-const State = { MENU: 'MENU', CONNECTING: 'CONNECTING', PLAYING: 'PLAYING', SKYDIVING: 'SKYDIVING', GAME_OVER: 'GAME_OVER' };
+const State = { MENU: 'MENU', LOBBY: 'LOBBY', CONNECTING: 'CONNECTING', PLAYING: 'PLAYING', SKYDIVING: 'SKYDIVING', GAME_OVER: 'GAME_OVER' };
 
 export class Game {
   constructor(container, uiRoot) {
@@ -23,13 +31,19 @@ export class Game {
     this.uiRoot = uiRoot;
     this.state = State.MENU;
     this.gameMode = 'solo';
+    this.mapId = 'arena';
+    this.mapConfig = getMapConfig('arena');
     this.isOnline = false;
 
     // Core systems
     this.renderer = new Renderer(container);
     this.assets = new AssetManager();
-    this.particles = new ParticleSystem(this.renderer.scene);
+    this.particles = new ParticleSystem(
+      this.renderer.scene,
+      this.renderer.isMobile() ? 200 : 600
+    );
     this.collision = new CollisionSystem();
+    this.projectilePool = null;
     this.input = null;
     this.network = null;
     this.world = null;
@@ -45,6 +59,13 @@ export class Game {
     this.bots = [];
     this.remotePlayers = new Map();
     this.serverProjectiles = new Map();
+    this.clientPickups = new Map();  // id -> ClientPickup
+    this.clientDestructibles = new Map(); // id -> { mesh, type, alive }
+
+    // BR zone state
+    this._brZone = null;
+    this._brZoneMesh = null;
+    this._brAliveCount = 0;
 
     // Ability state
     this._abilities = {
@@ -64,11 +85,46 @@ export class Game {
     this._fpsLastTime = performance.now();
     this._fpsDisplay = 0;
 
+    // Player profile / cosmetics
+    this.playerLevel = 1;
+    this.equippedSkin = 'default';
+    this.equippedTrail = 'none';
+    this.unlockedAchievements = [];
+
+    // Load saved cosmetics from localStorage
+    this._loadSavedProfile();
+
     // UI
     this.ui = new UIManager(uiRoot, this);
 
     // Start menu
     this.showMenu();
+  }
+
+  _loadSavedProfile() {
+    const token = localStorage.getItem('sa_token');
+    const playerId = localStorage.getItem('sa_playerId');
+    if (token && playerId) {
+      // Fetch cosmetics and achievements from server
+      fetch(`/api/player/${playerId}/cosmetics`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.equippedSkin) this.equippedSkin = data.equippedSkin;
+          if (data.equippedTrail) this.equippedTrail = data.equippedTrail;
+        }).catch(() => {});
+      fetch(`/api/player/${playerId}/achievements`)
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            this.unlockedAchievements = data.filter(a => a.unlocked).map(a => a.id);
+          }
+        }).catch(() => {});
+      fetch(`/api/player/${playerId}/stats`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.level) this.playerLevel = data.level;
+        }).catch(() => {});
+    }
   }
 
   // ─── STATE MANAGEMENT ─────────────────────────────────────────────
@@ -80,30 +136,44 @@ export class Game {
     this.ui.showMenu();
   }
 
-  startGame(mode) {
+  startGame(mode, mapId = 'arena') {
     this.gameMode = mode;
+    this.mapId = mapId;
+    this.mapConfig = getMapConfig(mapId);
     this.isOnline = mode !== 'solo';
 
     if (this.isOnline) {
-      this.state = State.CONNECTING;
-      this.ui.showConnecting();
-      this.connectOnline(mode);
+      this.state = State.LOBBY;
+      this.ui.showLobby(mode);
     } else {
       this.enterPlaying();
     }
   }
 
-  enterPlaying() {
+  async enterPlaying() {
     this.state = State.PLAYING;
 
-    // Build world
-    this.world = new WorldBuilder(this.renderer.scene, this.assets);
-    this.collision.setWallGrid(this.world.wallGrid, GameConfig.TILE_SIZE);
+    // Show loading screen
+    this.ui.showLoading();
+
+    // Build world asynchronously (pass renderer for quality-aware building)
+    this.world = new WorldBuilder(this.renderer.scene, this.assets, this.renderer, this.mapConfig);
+    await this.world.build((step, progress) => {
+      this.ui.updateLoadingProgress(step, progress);
+    });
+    this.collision.setWallGrid(this.world.wallGrid, this.mapConfig.tileSize);
     this.ui.hud.setWallGrid(this.world.wallGrid);
 
+    // Projectile pool (InstancedMesh for all bullets)
+    this.projectilePool = new ProjectilePool(this.renderer.scene, this.assets);
+
     // Create player at center
-    const spawnX = GameConfig.WORLD_WIDTH / 2;
-    const spawnY = GameConfig.WORLD_HEIGHT / 2;
+    const spawnX = this.mapConfig.width / 2;
+    const spawnY = this.mapConfig.height / 2;
+
+    // Set trail config for particle effects
+    this._trailConfig = TrailConfig[this.equippedTrail] || TrailConfig.none;
+
     this.player = new ClientPlayer(this, spawnX, spawnY);
 
     // Input
@@ -127,9 +197,11 @@ export class Game {
       this.setupOnlineMode();
     } else {
       this.spawnBots(5);
+      this.spawnOfflinePickups();
     }
 
-    // Show HUD
+    // Hide loading, show HUD
+    this.ui.hideLoading();
     this.ui.showHUD(this.gameMode);
 
     // Start loop
@@ -158,6 +230,9 @@ export class Game {
       this.ui.hud.setCameraMode(newMode);
     }
 
+    // Handle weapon switching (number keys 1-5 or scroll wheel)
+    this._handleWeaponSwitch(input);
+
     if (this.isOnline) {
       this.updateOnline(input, dt);
     } else {
@@ -172,11 +247,20 @@ export class Game {
       );
     }
 
+    // Flush projectile pool (single InstancedMesh update for all bullets)
+    if (this.projectilePool) this.projectilePool.flush();
+
     // Update particles
     this.particles.update(dt);
 
-    // Update world animations + light position
+    // Update pickups (floating/rotating animation)
+    for (const cp of this.clientPickups.values()) {
+      cp.update(dt);
+    }
+
+    // Update world animations + light position + day/night cycle
     if (this.world) {
+      this.world.updateTimeOfDay(dt);
       this.world.updateSky(dt);
       this.world.updateWater(dt);
       this.world.updateLightTarget(this.player.x, this.player.y);
@@ -226,10 +310,12 @@ export class Game {
 
       // Shooting
       if (input.shoot) {
-        const bulletData = this.player.shoot();
-        if (bulletData) {
-          const bullet = new ClientProjectile(this, bulletData.x, bulletData.y, bulletData.angle, true);
-          this.playerBullets.push(bullet);
+        const bullets = this.player.shoot();
+        if (bullets) {
+          for (const b of bullets) {
+            const bullet = new ClientProjectile(this, b.x, b.y, b.angle, true, b.weaponType);
+            this.playerBullets.push(bullet);
+          }
         }
       }
 
@@ -253,6 +339,9 @@ export class Game {
     // Clean up destroyed bullets
     this.playerBullets = this.playerBullets.filter(b => b.alive);
     this.botBullets = this.botBullets.filter(b => b.alive);
+
+    // Check pickup collisions
+    this.checkOfflinePickups();
   }
 
   updateOfflineProjectiles(dt) {
@@ -349,27 +438,65 @@ export class Game {
     }
   }
 
-  connectOnline(mode) {
+  connectAndCreateRoom(mode) {
+    if (this.network) { this.network.disconnect(); }
     this.network = new NetworkManager();
+    this._setupLobbyCallbacks();
     this.network.connect();
+    this._waitForConnection(() => this.network.createRoom(mode, this.mapId));
+  }
 
+  connectAndJoinRoom(code, mode) {
+    if (this.network) { this.network.disconnect(); }
+    this.network = new NetworkManager();
+    this._setupLobbyCallbacks();
+    this.network.connect();
+    this._waitForConnection(() => this.network.joinRoom(code));
+  }
+
+  hostStartMatch() {
+    if (!this.network?.connected) return;
+    this.network.requestStartMatch();
+  }
+
+  leaveLobby() {
+    if (this.network) { this.network.disconnect(); this.network = null; }
+    this.ui.showLobby(this.gameMode);
+  }
+
+  _setupLobbyCallbacks() {
+    this.network.onRoomCreated = (data) => {
+      this.ui.lobby.showLobby(data.code, data.players, data.maxPlayers, data.isHost);
+    };
+    this.network.onRoomJoined = (data) => {
+      this.ui.lobby.showLobby(data.code, data.players, data.maxPlayers, data.isHost);
+    };
+    this.network.onRoomUpdate = (data) => {
+      this.ui.lobby.updatePlayers(data.players, data.maxPlayers);
+    };
+    this.network.onJoinFailed = (data) => {
+      this.ui.lobby.showError(data.reason);
+      this.network.disconnect();
+      this.network = null;
+    };
+    this.network.onMatchStart = () => {
+      this.enterPlaying();
+    };
+  }
+
+  _waitForConnection(callback) {
     let checkCount = 0;
-    const checkInterval = setInterval(() => {
+    const check = setInterval(() => {
       checkCount++;
-      if (this.network.connected) {
-        clearInterval(checkInterval);
-        this.ui.showStatus(`Connected! Searching for ${mode} match...`);
-        this.network.joinQueue(mode);
-        this.network.onMatchStart = () => {
-          this.enterPlaying();
-        };
+      if (this.network?.connected) {
+        clearInterval(check);
+        callback();
       }
       if (checkCount > 50) {
-        clearInterval(checkInterval);
-        this.ui.showStatus('Could not connect. Is the server running?');
-        this.network.disconnect();
+        clearInterval(check);
+        this.ui.lobby.showError('Could not connect. Is the server running?');
+        this.network?.disconnect();
         this.network = null;
-        setTimeout(() => this.showMenu(), 2000);
       }
     }, 100);
   }
@@ -385,6 +512,23 @@ export class Game {
     this.network.onAbilityResult = (data) => this.handleAbilityResult(data);
     this.network.onRadarReveal = (data) => this.handleRadarReveal(data);
     this.network.onMatchEnd = (data) => this.handleMatchEnd(data);
+    this.network.onZoneUpdate = (data) => this.handleZoneUpdate(data);
+    this.network.onBREliminated = (data) => this.handleBREliminated(data);
+    this.network.onFlagUpdate = (data) => this.handleFlagUpdate(data);
+    this.network.onHillUpdate = (data) => this.handleHillUpdate(data);
+    this.network.onAchievementUnlocked = (data) => {
+      this.ui.achievementToast.show(data);
+      if (!this.unlockedAchievements.includes(data.id)) {
+        this.unlockedAchievements.push(data.id);
+      }
+    };
+
+    // Authenticate socket if logged in
+    const playerId = localStorage.getItem('sa_playerId');
+    const username = localStorage.getItem('sa_username');
+    if (playerId && username) {
+      this.network.authenticate(playerId, username);
+    }
   }
 
   handleSnapshot(snapshot) {
@@ -395,6 +539,10 @@ export class Game {
       this.player.maxHealth = myState.maxHealth;
       this.player.alive = myState.alive;
       this.player.setShield(myState.shieldActive);
+      if (myState.weaponType && myState.weaponType !== this.player.weaponType) {
+        this.player.setWeapon(myState.weaponType);
+        this.ui.hud.setWeapon(myState.weaponType);
+      }
       this.kills = myState.kills;
       this.deaths = myState.deaths;
       if (!myState.alive) this.player.die();
@@ -411,11 +559,13 @@ export class Game {
       remote.addSnapshot(pState);
     }
 
-    // Remove disconnected
-    for (const [id] of this.remotePlayers) {
-      if (!snapshot.players.find(p => p.id === id)) {
-        this.remotePlayers.get(id).destroy();
-        this.remotePlayers.delete(id);
+    // Remove disconnected (only on full snapshots, not deltas)
+    if (!snapshot.delta) {
+      for (const [id] of this.remotePlayers) {
+        if (!snapshot.players.find(p => p.id === id)) {
+          this.remotePlayers.get(id).destroy();
+          this.remotePlayers.delete(id);
+        }
       }
     }
 
@@ -432,6 +582,16 @@ export class Game {
 
     // Server projectiles
     this.syncServerProjectiles(snapshot.projectiles);
+
+    // Server pickups
+    if (snapshot.pickups) {
+      this.syncPickups(snapshot.pickups);
+    }
+
+    // Server destructibles
+    if (snapshot.destructibles) {
+      this.syncDestructibles(snapshot.destructibles);
+    }
   }
 
   reconcileLocalPlayer(serverState) {
@@ -455,7 +615,7 @@ export class Game {
       let proj = this.serverProjectiles.get(pState.id);
       if (!proj) {
         const isPlayer = pState.ownerId === this.network?.playerId;
-        proj = new ClientProjectile(this, pState.x, pState.y, pState.rotation, isPlayer);
+        proj = new ClientProjectile(this, pState.x, pState.y, pState.rotation, isPlayer, pState.weaponType || 'auto_rifle');
         proj.serverId = pState.id;
         this.serverProjectiles.set(pState.id, proj);
       }
@@ -465,6 +625,58 @@ export class Game {
       if (!activeIds.has(id)) {
         proj.destroy();
         this.serverProjectiles.delete(id);
+      }
+    }
+  }
+
+  syncPickups(pickupStates) {
+    const activeIds = new Set();
+    for (const ps of pickupStates) {
+      activeIds.add(ps.id);
+      let cp = this.clientPickups.get(ps.id);
+      if (!cp) {
+        cp = new ClientPickup(this.renderer.scene, ps.id, ps.x, ps.y, ps.pickupType);
+        this.clientPickups.set(ps.id, cp);
+      }
+      cp.setAlive(ps.alive);
+    }
+    // Remove pickups no longer in snapshot
+    for (const [id, cp] of this.clientPickups) {
+      if (!activeIds.has(id)) {
+        cp.destroy();
+        this.clientPickups.delete(id);
+      }
+    }
+  }
+
+  syncDestructibles(destStates) {
+    for (const ds of destStates) {
+      let cd = this.clientDestructibles.get(ds.id);
+      if (!cd) {
+        // Create 3D mesh for destructible
+        const isCrate = ds.type === 'crate';
+        const geo = isCrate
+          ? new THREE.BoxGeometry(12, 12, 12)
+          : new THREE.CylinderGeometry(6, 6, 16, 8);
+        const color = isCrate ? 0x8B6914 : 0x555555;
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.2 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(ds.x, isCrate ? 6 : 8, ds.y);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.renderer.scene.add(mesh);
+        cd = { mesh, type: ds.type, alive: true };
+        this.clientDestructibles.set(ds.id, cd);
+      }
+      if (ds.alive !== cd.alive) {
+        cd.alive = ds.alive;
+        cd.mesh.visible = ds.alive;
+        if (!ds.alive) {
+          // Destruction particles
+          this.particles.emit(ds.x, 8, ds.y, {
+            count: 10, speed: 80, color: ds.type === 'crate' ? 0x8B6914 : 0x555555, lifetime: 0.4, size: 2
+          });
+        }
       }
     }
   }
@@ -483,6 +695,109 @@ export class Game {
 
   handleOnlineRespawn(data) {
     if (data.playerId === this.network?.playerId) this.player.respawn(data.x, data.y);
+  }
+
+  handleZoneUpdate(data) {
+    this._brZone = { x: data.x, y: data.y, radius: data.radius, shrinking: data.shrinking };
+
+    // Create or update zone ring mesh
+    if (!this._brZoneMesh) {
+      const ringGeo = new THREE.RingGeometry(1, 1.05, 64);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xff4444, transparent: true, opacity: 0.3,
+        side: THREE.DoubleSide, depthWrite: false
+      });
+      this._brZoneMesh = new THREE.Mesh(ringGeo, ringMat);
+      this._brZoneMesh.rotation.x = -Math.PI / 2;
+      this._brZoneMesh.position.y = 1;
+      this.renderer.scene.add(this._brZoneMesh);
+    }
+
+    // Scale the ring to match zone radius
+    this._brZoneMesh.position.set(data.x, 1, data.y);
+    this._brZoneMesh.scale.set(data.radius, data.radius, 1);
+
+    // Update minimap zone indicator
+    if (this.ui.hud && this.ui.hud.updateZone) {
+      this.ui.hud.updateZone(data.x, data.y, data.radius);
+    }
+  }
+
+  handleBREliminated(data) {
+    this._brAliveCount = data.remaining;
+    if (this.ui.hud && this.ui.hud.updateAliveCount) {
+      this.ui.hud.updateAliveCount(data.remaining);
+    }
+  }
+
+  handleFlagUpdate(data) {
+    // Render flag positions on minimap and in 3D
+    if (this.ui.hud && this.ui.hud.updateFlags) {
+      this.ui.hud.updateFlags(data.flags, data.scores);
+    }
+
+    // Create/update 3D flag meshes
+    if (!this._flagMeshes) {
+      this._flagMeshes = {};
+      for (const team of ['red', 'blue']) {
+        const color = team === 'red' ? 0xff4444 : 0x4488ff;
+        const poleGeo = new THREE.CylinderGeometry(0.8, 0.8, 40, 6);
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.5, metalness: 0.5 });
+        const pole = new THREE.Mesh(poleGeo, poleMat);
+
+        const flagGeo = new THREE.PlaneGeometry(12, 8);
+        const flagMat = new THREE.MeshStandardMaterial({
+          color, emissive: color, emissiveIntensity: 1.0,
+          side: THREE.DoubleSide, transparent: true, opacity: 0.8
+        });
+        const flag = new THREE.Mesh(flagGeo, flagMat);
+        flag.position.set(6, 14, 0);
+
+        const group = new THREE.Group();
+        group.add(pole);
+        group.add(flag);
+        this.renderer.scene.add(group);
+        this._flagMeshes[team] = group;
+      }
+    }
+
+    for (const team of ['red', 'blue']) {
+      const fd = data.flags[team];
+      const mesh = this._flagMeshes[team];
+      mesh.position.set(fd.x, 20, fd.y);
+      mesh.visible = !fd.carrier; // Hide when being carried (attached to player)
+    }
+  }
+
+  handleHillUpdate(data) {
+    if (this.ui.hud && this.ui.hud.updateHill) {
+      this.ui.hud.updateHill(data.x, data.y, data.radius, data.controlling, data.scores);
+    }
+
+    // Create/update hill zone mesh in 3D
+    if (!this._hillMesh) {
+      const hillGeo = new THREE.RingGeometry(1, 1.02, 48);
+      const hillMat = new THREE.MeshBasicMaterial({
+        color: 0xffff44, transparent: true, opacity: 0.25,
+        side: THREE.DoubleSide, depthWrite: false
+      });
+      this._hillMesh = new THREE.Mesh(hillGeo, hillMat);
+      this._hillMesh.rotation.x = -Math.PI / 2;
+      this._hillMesh.position.y = 0.5;
+      this.renderer.scene.add(this._hillMesh);
+    }
+
+    this._hillMesh.position.set(data.x, 0.5, data.y);
+    this._hillMesh.scale.set(data.radius, data.radius, 1);
+
+    // Color based on controlling team
+    if (data.controlling === 'red') {
+      this._hillMesh.material.color.setHex(0xff4444);
+    } else if (data.controlling === 'blue') {
+      this._hillMesh.material.color.setHex(0x4488ff);
+    } else {
+      this._hillMesh.material.color.setHex(0xffff44); // neutral
+    }
   }
 
   handleAbilityResult(data) {
@@ -522,6 +837,44 @@ export class Game {
     }, 60);
   }
 
+  // ─── WEAPON SWITCHING ──────────────────────────────────────────
+
+  _handleWeaponSwitch(input) {
+    if (!this.player || !this.player.alive) return;
+
+    const weaponList = [
+      WeaponType.AUTO_RIFLE,
+      WeaponType.PISTOL,
+      WeaponType.SMG,
+      WeaponType.SHOTGUN,
+      WeaponType.SNIPER
+    ];
+
+    let newWeapon = null;
+
+    // Number keys 1-5
+    if (input.weaponSwitch >= 1 && input.weaponSwitch <= 5) {
+      newWeapon = weaponList[input.weaponSwitch - 1];
+    }
+
+    // Scroll wheel
+    if (input.scrollSwitch) {
+      this.player.cycleWeapon(input.scrollSwitch);
+      newWeapon = this.player.weaponType;
+    }
+
+    if (newWeapon && newWeapon !== this.player.weaponType) {
+      this.player.setWeapon(newWeapon);
+    }
+
+    if (newWeapon) {
+      this.ui.hud.setWeapon(this.player.weaponType);
+      if (this.isOnline && this.network?.connected) {
+        this.network.sendWeaponSwitch(this.player.weaponType);
+      }
+    }
+  }
+
   // ─── ABILITIES ───────────────────────────────────────────────────
 
   handleAbility(name) {
@@ -553,9 +906,9 @@ export class Game {
   activateDash() {
     if (!this.player.alive) return;
     const angle = this.player.rotation;
-    const targetX = Math.max(20, Math.min(GameConfig.WORLD_WIDTH - 20,
+    const targetX = Math.max(20, Math.min(this.mapConfig.width - 20,
       this.player.x + Math.cos(angle) * 200));
-    const targetY = Math.max(20, Math.min(GameConfig.WORLD_HEIGHT - 20,
+    const targetY = Math.max(20, Math.min(this.mapConfig.height - 20,
       this.player.y + Math.sin(angle) * 200));
 
     // Animate dash
@@ -620,8 +973,8 @@ export class Game {
 
   enterSkydive() {
     this.state = State.SKYDIVING;
-    this._skydiveX = GameConfig.WORLD_WIDTH / 2;
-    this._skydiveZ = GameConfig.WORLD_HEIGHT / 2;
+    this._skydiveX = this.mapConfig.width / 2;
+    this._skydiveZ = this.mapConfig.height / 2;
     this._skydiveDescending = false;
     this._descentStart = 0;
     this._descentDuration = 1500; // 1.5s descent
@@ -679,8 +1032,8 @@ export class Game {
     if (input.right) this._skydiveX += speed * dt;
 
     // Clamp to world bounds
-    this._skydiveX = Math.max(margin, Math.min(GameConfig.WORLD_WIDTH - margin, this._skydiveX));
-    this._skydiveZ = Math.max(margin, Math.min(GameConfig.WORLD_HEIGHT - margin, this._skydiveZ));
+    this._skydiveX = Math.max(margin, Math.min(this.mapConfig.width - margin, this._skydiveX));
+    this._skydiveZ = Math.max(margin, Math.min(this.mapConfig.height - margin, this._skydiveZ));
 
     // Update camera and marker
     this.renderer.followSkydive(this._skydiveX, this._skydiveZ);
@@ -748,10 +1101,78 @@ export class Game {
   spawnBots(count) {
     const margin = 100;
     for (let i = 0; i < count; i++) {
-      const x = margin + Math.random() * (GameConfig.WORLD_WIDTH - margin * 2);
-      const y = margin + Math.random() * (GameConfig.WORLD_HEIGHT - margin * 2);
+      const x = margin + Math.random() * (this.mapConfig.width - margin * 2);
+      const y = margin + Math.random() * (this.mapConfig.height - margin * 2);
       const bot = new ClientBot(this, x, y, BotType.GRUNT);
       this.bots.push(bot);
+    }
+  }
+
+  spawnOfflinePickups() {
+    const W = this.mapConfig.width;
+    const H = this.mapConfig.height;
+    const defs = [
+      { type: PickupType.WEAPON_SMG,     x: W * 0.25, y: H * 0.25 },
+      { type: PickupType.WEAPON_SHOTGUN, x: W * 0.75, y: H * 0.25 },
+      { type: PickupType.WEAPON_SNIPER,  x: W * 0.5,  y: H * 0.15 },
+      { type: PickupType.WEAPON_SMG,     x: W * 0.25, y: H * 0.75 },
+      { type: PickupType.WEAPON_SHOTGUN, x: W * 0.75, y: H * 0.75 },
+      { type: PickupType.WEAPON_SNIPER,  x: W * 0.5,  y: H * 0.85 },
+      { type: PickupType.HEALTH, x: W * 0.35, y: H * 0.5 },
+      { type: PickupType.HEALTH, x: W * 0.65, y: H * 0.5 },
+      { type: PickupType.HEALTH, x: W * 0.5,  y: H * 0.35 },
+      { type: PickupType.HEALTH, x: W * 0.5,  y: H * 0.65 },
+      { type: PickupType.SHIELD, x: W * 0.15, y: H * 0.5 },
+      { type: PickupType.SHIELD, x: W * 0.85, y: H * 0.5 },
+    ];
+    let idCounter = 0;
+    for (const d of defs) {
+      const id = `pickup_${idCounter++}`;
+      const cp = new ClientPickup(this.renderer.scene, id, d.x, d.y, d.type);
+      cp._pickupType = d.type;
+      cp._respawnAt = 0;
+      this.clientPickups.set(id, cp);
+    }
+  }
+
+  checkOfflinePickups() {
+    if (!this.player || !this.player.alive) return;
+    const px = this.player.x;
+    const py = this.player.y;
+    const pr = this.player.radius;
+
+    for (const [id, cp] of this.clientPickups) {
+      if (!cp.alive) {
+        // Check respawn (30 seconds)
+        if (cp._respawnAt && performance.now() >= cp._respawnAt) {
+          cp.setAlive(true);
+          cp._respawnAt = 0;
+        }
+        continue;
+      }
+      const dx = px - cp.x;
+      const dy = py - cp.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 20 + pr) {
+        const config = PickupConfig[cp._pickupType];
+        if (config.weaponType) {
+          this.player.setWeapon(config.weaponType);
+          this.ui.hud.setWeapon(config.weaponType);
+        }
+        if (config.healAmount > 0) {
+          this.player.health = Math.min(this.player.maxHealth, this.player.health + config.healAmount);
+        }
+        if (config.shieldDuration > 0) {
+          this.player.setShield(true);
+          setTimeout(() => { if (this.player) this.player.setShield(false); }, config.shieldDuration);
+        }
+        // Pickup effect particles
+        this.particles.emit(cp.x, 15, cp.y, {
+          count: 10, speed: 60, color: config.color, lifetime: 0.4, size: 2
+        });
+        cp.setAlive(false);
+        cp._respawnAt = performance.now() + 30000;
+      }
     }
   }
 
@@ -777,11 +1198,46 @@ export class Game {
     for (const b of this.bots) b.destroy();
     for (const r of this.remotePlayers.values()) r.destroy();
     for (const p of this.serverProjectiles.values()) p.destroy();
+    for (const cp of this.clientPickups.values()) cp.destroy();
+    for (const cd of this.clientDestructibles.values()) {
+      this.renderer.scene.remove(cd.mesh);
+      cd.mesh.geometry.dispose();
+      cd.mesh.material.dispose();
+    }
     this.playerBullets = [];
     this.botBullets = [];
     this.bots = [];
     this.remotePlayers.clear();
     this.serverProjectiles.clear();
+    this.clientPickups.clear();
+    this.clientDestructibles.clear();
+    if (this._brZoneMesh) {
+      this.renderer.scene.remove(this._brZoneMesh);
+      this._brZoneMesh.geometry.dispose();
+      this._brZoneMesh.material.dispose();
+      this._brZoneMesh = null;
+    }
+    this._brZone = null;
+    this._brAliveCount = 0;
+    if (this._flagMeshes) {
+      for (const team of ['red', 'blue']) {
+        if (this._flagMeshes[team]) {
+          this.renderer.scene.remove(this._flagMeshes[team]);
+          this._flagMeshes[team].traverse(c => {
+            if (c.geometry) c.geometry.dispose();
+            if (c.material) c.material.dispose();
+          });
+        }
+      }
+      this._flagMeshes = null;
+    }
+    if (this._hillMesh) {
+      this.renderer.scene.remove(this._hillMesh);
+      this._hillMesh.geometry.dispose();
+      this._hillMesh.material.dispose();
+      this._hillMesh = null;
+    }
+    if (this.projectilePool) { this.projectilePool.destroy(); this.projectilePool = null; }
     if (this.world) { this.world.destroy(); this.world = null; }
     if (this.input) { this.input.destroy(); this.input = null; }
     if (this.network) { this.network.disconnect(); this.network = null; }

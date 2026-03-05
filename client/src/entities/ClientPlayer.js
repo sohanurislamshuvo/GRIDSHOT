@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
+import { WeaponType, WeaponConfig } from 'shadow-arena-shared/config/WeaponConfig.js';
 import { CharacterFactory } from './CharacterFactory.js';
 
 export class ClientPlayer {
@@ -18,12 +19,23 @@ export class ClientPlayer {
     this.speed = GameConfig.PLAYER_SPEED;
     this.shieldActive = false;
 
-    // Shooting
+    // Weapon system
+    this.weaponType = WeaponType.AUTO_RIFLE;
+    this._weaponList = [
+      WeaponType.AUTO_RIFLE,
+      WeaponType.PISTOL,
+      WeaponType.SMG,
+      WeaponType.SHOTGUN,
+      WeaponType.SNIPER
+    ];
+    this._weaponIndex = 0;
+
+    // Shooting (derived from weapon config)
     this._lastShotTime = 0;
-    this._fireInterval = 1000 / GameConfig.FIRE_RATE;
+    this._fireInterval = 1000 / WeaponConfig[this.weaponType].fireRate;
 
     // 3D model
-    this.group = CharacterFactory.createPlayer(game.assets);
+    this.group = CharacterFactory.createPlayer(game.assets, this.weaponType, game.equippedSkin || 'default');
     this.group.position.set(x, 0, y);
     this.scene.add(this.group);
 
@@ -66,6 +78,12 @@ export class ClientPlayer {
     this._flashMat = new THREE.MeshStandardMaterial({
       color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.0
     });
+
+    // Reusable muzzle flash light (avoids creating/destroying PointLights per shot)
+    this._muzzleLight = new THREE.PointLight(0xffff88, 0, 40);
+    this._muzzleLight.visible = false;
+    this.scene.add(this._muzzleLight);
+    this._muzzleLightTimer = null;
 
     // Dash ghost trail
     this._dashGhosts = [];
@@ -121,6 +139,13 @@ export class ClientPlayer {
           count: 1, speed: 15, color: 0x555555, lifetime: 0.4, size: 1.5
         });
       }
+      // Trail effect based on equipped cosmetic
+      const trailCfg = this.game._trailConfig;
+      if (trailCfg && trailCfg.color !== null && Math.random() < 0.5) {
+        this.game.particles.emit(this.x, 5, this.y, {
+          count: 1, speed: 8, color: trailCfg.color, lifetime: 0.6, size: 2.0
+        });
+      }
     }
 
     // Rotate shield
@@ -140,26 +165,60 @@ export class ClientPlayer {
     this.shieldMesh.position.set(this.x, 15, this.y);
   }
 
+  setWeapon(weaponType) {
+    const wep = WeaponConfig[weaponType];
+    if (!wep) return;
+    this.weaponType = weaponType;
+    this._fireInterval = 1000 / wep.fireRate;
+    const idx = this._weaponList.indexOf(weaponType);
+    if (idx >= 0) this._weaponIndex = idx;
+
+    // Swap gun model
+    CharacterFactory.attachGun(this.group, weaponType, this.game.assets);
+
+    // Refresh original materials cache (for flash restore)
+    this._originalMaterials = [];
+    this.group.traverse(child => {
+      if (child.isMesh) this._originalMaterials.push({ mesh: child, material: child.material });
+    });
+  }
+
+  cycleWeapon(direction) {
+    this._weaponIndex = (this._weaponIndex + direction + this._weaponList.length) % this._weaponList.length;
+    this.setWeapon(this._weaponList[this._weaponIndex]);
+  }
+
   shoot() {
     const now = performance.now();
     if (now - this._lastShotTime < this._fireInterval) return null;
     this._lastShotTime = now;
 
+    const wep = WeaponConfig[this.weaponType] || WeaponConfig[WeaponType.AUTO_RIFLE];
     const gunDist = 24;
     const bx = this.x + Math.cos(this.rotation) * gunDist;
     const by = this.y + Math.sin(this.rotation) * gunDist;
 
-    // Muzzle flash particles (brighter, more impactful)
+    // Muzzle flash particles
     this.game.particles.emit(bx, 14, by, {
-      count: 5, speed: 60, color: 0xffffaa, lifetime: 0.06, size: 3
+      count: 5, speed: 60, color: wep.tracerColor, lifetime: 0.06, size: 3
     });
-    // Muzzle flash light (brief)
-    const flash = new THREE.PointLight(0xffff88, 2, 40);
-    flash.position.set(bx, 14, by);
-    this.scene.add(flash);
-    setTimeout(() => { this.scene.remove(flash); flash.dispose(); }, 50);
+    // Reuse muzzle flash light
+    this._muzzleLight.position.set(bx, 14, by);
+    this._muzzleLight.intensity = 2;
+    this._muzzleLight.visible = true;
+    if (this._muzzleLightTimer) clearTimeout(this._muzzleLightTimer);
+    this._muzzleLightTimer = setTimeout(() => {
+      this._muzzleLight.intensity = 0;
+      this._muzzleLight.visible = false;
+    }, 50);
 
-    return { x: bx, y: by, angle: this.rotation };
+    // Generate projectiles (multiple for shotgun)
+    const bullets = [];
+    for (let i = 0; i < wep.projectileCount; i++) {
+      const spread = (Math.random() - 0.5) * wep.spread * 2;
+      bullets.push({ x: bx, y: by, angle: this.rotation + spread, weaponType: this.weaponType });
+    }
+    return bullets;
   }
 
   takeDamage(amount) {
@@ -301,6 +360,9 @@ export class ClientPlayer {
     this.scene.remove(this.group);
     this.scene.remove(this.shadow);
     this.scene.remove(this.shieldMesh);
+    this.scene.remove(this._muzzleLight);
+    if (this._muzzleLightTimer) clearTimeout(this._muzzleLightTimer);
+    this._muzzleLight.dispose();
     for (const g of this._dashGhosts) this.scene.remove(g.mesh);
     this._dashGhosts = [];
     if (this._healParticleInterval) clearInterval(this._healParticleInterval);

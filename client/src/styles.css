@@ -36,6 +36,38 @@
   min-height: 20px;
 }
 
+.menu-map-select {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.map-label {
+  font-size: 14px;
+  color: #888;
+  margin-right: 4px;
+}
+.map-btn {
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  color: #888;
+  background: rgba(20, 20, 40, 0.6);
+  border: 1px solid rgba(68, 136, 255, 0.2);
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.map-btn:hover {
+  color: #ccc;
+  border-color: rgba(68, 136, 255, 0.5);
+}
+.map-btn.active {
+  color: #fff;
+  background: rgba(68, 136, 255, 0.3);
+  border-color: rgba(68, 136, 255, 0.7);
+}
+
 .menu-buttons {
   display: flex;
   flex-direction: column;
@@ -71,6 +103,191 @@
   font-family: 'Courier New', monospace;
   text-align: center;
   line-height: 1.6;
+}
+
+/* ─── LOBBY SCREEN ──────────────────────────────────────────── */
+.lobby-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(5,5,15,0.97) 0%, rgba(10,10,20,0.97) 100%);
+  z-index: 50;
+}
+
+.lobby-title {
+  font-size: 42px;
+  color: #4488ff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  margin: 0 0 4px 0;
+  text-shadow: 0 0 20px rgba(68,136,255,0.5), 0 0 40px rgba(68,136,255,0.2);
+}
+
+.lobby-mode-label {
+  font-size: 22px;
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  font-weight: normal;
+  margin: 0 0 24px 0;
+  letter-spacing: 3px;
+}
+
+.lobby-initial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.lobby-join-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.lobby-code-input {
+  font-size: 18px;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  background: rgba(20, 20, 40, 0.8);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  padding: 12px 16px;
+  width: 160px;
+  text-align: center;
+  letter-spacing: 4px;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.lobby-code-input:focus {
+  border-color: rgba(68, 136, 255, 0.7);
+  box-shadow: 0 0 10px rgba(68, 136, 255, 0.2);
+}
+.lobby-code-input::placeholder {
+  color: #555;
+  letter-spacing: 2px;
+}
+
+.lobby-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  min-width: 320px;
+}
+
+.lobby-code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(20, 20, 40, 0.6);
+  padding: 10px 20px;
+  border: 1px solid rgba(68, 136, 255, 0.2);
+  border-radius: 4px;
+}
+
+.lobby-code-label {
+  font-size: 13px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+
+.lobby-code {
+  font-size: 28px;
+  color: #4488ff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 6px;
+  text-shadow: 0 0 10px rgba(68,136,255,0.4);
+}
+
+.lobby-copy-btn {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: #aaa;
+  background: rgba(40, 40, 60, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.lobby-copy-btn:hover {
+  color: #fff;
+  border-color: rgba(68, 136, 255, 0.5);
+}
+
+.lobby-players {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lobby-players-title {
+  font-size: 13px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.lobby-player {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(25, 25, 45, 0.7);
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+}
+.lobby-player.red { border-left-color: #ff4444; }
+.lobby-player.blue { border-left-color: #4488ff; }
+.lobby-player.empty { opacity: 0.35; }
+
+.lobby-player-name {
+  font-size: 14px;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+
+.lobby-team-tag {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 2px;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.lobby-team-tag.red { color: #ff6666; background: rgba(255,68,68,0.15); }
+.lobby-team-tag.blue { color: #6699ff; background: rgba(68,136,255,0.15); }
+
+.lobby-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.lobby-start-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.lobby-status {
+  font-size: 14px;
+  color: #ffaa00;
+  font-family: 'Courier New', monospace;
+  margin-top: 16px;
+  min-height: 20px;
+  text-align: center;
 }
 
 /* ─── GAME OVER SCREEN ───────────────────────────────────────── */
@@ -137,9 +354,21 @@
   border-radius: 3px;
   overflow: hidden;
   margin-bottom: 6px;
+  position: relative;
+}
+
+.hud-health-ghost {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #cc2222, #ff3333);
+  transition: width 0.6s ease-out;
+  opacity: 0.7;
 }
 
 .hud-health-fill {
+  position: relative;
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, #44ff44, #66ff66);
@@ -238,10 +467,11 @@
 .hud-ability-cooldown-overlay {
   position: absolute;
   left: 0; top: 0;
+  width: 100%;
   height: 100%;
-  width: 0%;
-  background: rgba(0, 0, 0, 0.6);
+  background: conic-gradient(rgba(0, 0, 0, 0.6) var(--cd-pct, 0%), transparent var(--cd-pct, 0%));
   z-index: 1;
+  border-radius: 6px;
 }
 
 .hud-ability-cooldown-text {
@@ -431,6 +661,32 @@
   pointer-events: none;
 }
 
+.hud-weapon-slots {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+.hud-wslot {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+.hud-wslot.active {
+  color: #4488ff;
+  background: rgba(68, 136, 255, 0.15);
+  border-color: rgba(68, 136, 255, 0.5);
+  box-shadow: 0 0 6px rgba(68, 136, 255, 0.25);
+}
+
 .hud-weapon-name {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
@@ -579,6 +835,11 @@
   .menu-subtitle { font-size: 20px; }
   .menu-btn { padding: 16px 36px; font-size: 18px; }
 
+  .lobby-title { font-size: 32px; }
+  .lobby-mode-label { font-size: 18px; }
+  .lobby-code { font-size: 22px; }
+  .lobby-view { min-width: 280px; }
+
   .hud-ability {
     width: 72px;
     height: 44px;
@@ -588,4 +849,448 @@
   .hud-bottom-right { bottom: 180px; }
   .hud-compass { display: none; }
   .hud-kill-feed { top: 40px; }
+}
+
+/* ─── LOADING SCREEN ─────────────────────────────────────────── */
+.loading-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(5,5,15,0.98) 0%, rgba(10,10,20,0.98) 100%);
+  z-index: 55;
+}
+
+.loading-title {
+  font-size: 36px;
+  color: #4488ff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  margin-bottom: 24px;
+  text-shadow: 0 0 20px rgba(68,136,255,0.5);
+  letter-spacing: 8px;
+}
+
+.loading-step {
+  font-size: 14px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 12px;
+  min-height: 20px;
+}
+
+.loading-bar-bg {
+  width: 300px;
+  height: 4px;
+  background: #222;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #4488ff, #66aaff);
+  border-radius: 2px;
+  transition: width 0.15s ease;
+}
+
+/* ─── ACCOUNT / AUTH ───────────────────────────────────────────── */
+.menu-account {
+  margin-bottom: 12px;
+  text-align: center;
+}
+.account-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.account-input {
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  background: rgba(20, 20, 40, 0.8);
+  border: 1px solid rgba(68, 136, 255, 0.25);
+  padding: 8px 12px;
+  width: 130px;
+  border-radius: 3px;
+  outline: none;
+}
+.account-input:focus { border-color: rgba(68, 136, 255, 0.6); }
+.account-btn {
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: #ccc;
+  background: rgba(40, 40, 60, 0.8);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.account-btn:hover { color: #fff; border-color: rgba(68, 136, 255, 0.7); }
+.account-reg-btn { color: #888; }
+.account-error {
+  font-size: 12px;
+  color: #ff4444;
+  font-family: 'Courier New', monospace;
+  margin-top: 6px;
+  min-height: 16px;
+}
+.account-user {
+  font-size: 13px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  margin-right: 10px;
+}
+.account-user strong { color: #4488ff; }
+.account-logout-btn {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: #888;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.account-logout-btn:hover { color: #ff4444; border-color: rgba(255,68,68,0.5); }
+
+/* ─── MENU BOTTOM BAR ────────────────────────────────────────── */
+.menu-bottom-bar {
+  position: absolute;
+  bottom: 80px;
+  display: flex;
+  gap: 12px;
+}
+.menu-profile-btn {
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  color: #aaa;
+  background: rgba(30, 30, 50, 0.7);
+  border: 1px solid rgba(68, 136, 255, 0.25);
+  padding: 10px 24px;
+  cursor: pointer;
+  border-radius: 4px;
+  letter-spacing: 2px;
+  transition: all 0.2s;
+}
+.menu-profile-btn:hover {
+  color: #fff;
+  border-color: rgba(68, 136, 255, 0.6);
+  box-shadow: 0 0 12px rgba(68, 136, 255, 0.2);
+}
+
+/* ─── PROFILE PANEL ────────────────────────────────────────────── */
+.profile-panel {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(5, 5, 15, 0.97);
+  z-index: 60;
+}
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(68, 136, 255, 0.15);
+  position: relative;
+}
+.profile-close-btn {
+  position: absolute;
+  right: 20px;
+  top: 16px;
+  font-size: 18px;
+  font-family: 'Courier New', monospace;
+  color: #888;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.profile-close-btn:hover { color: #ff4444; border-color: rgba(255,68,68,0.5); }
+.profile-tabs { display: flex; gap: 4px; }
+.profile-tab {
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  color: #666;
+  background: rgba(20, 20, 40, 0.5);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 24px;
+  cursor: pointer;
+  border-radius: 3px 3px 0 0;
+  letter-spacing: 2px;
+  transition: all 0.2s;
+}
+.profile-tab:hover { color: #aaa; }
+.profile-tab.active {
+  color: #4488ff;
+  background: rgba(68, 136, 255, 0.1);
+  border-color: rgba(68, 136, 255, 0.3);
+  border-bottom-color: transparent;
+}
+.profile-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+.section-title {
+  font-size: 14px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 3px;
+  margin: 0 0 12px 0;
+  font-weight: normal;
+}
+
+/* ─── SKINS ─────────────────────────────────────────────────── */
+.skin-section { margin-bottom: 24px; }
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.skin-card {
+  background: rgba(20, 20, 40, 0.6);
+  border: 2px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+.skin-card:hover:not(.locked) {
+  border-color: rgba(68, 136, 255, 0.5);
+  box-shadow: 0 0 10px rgba(68, 136, 255, 0.15);
+}
+.skin-card.equipped {
+  border-color: rgba(68, 255, 136, 0.6);
+  box-shadow: 0 0 12px rgba(68, 255, 136, 0.2);
+}
+.skin-card.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.skin-preview {
+  width: 100%;
+  height: 60px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.trail-preview { height: 40px; }
+.skin-name {
+  font-size: 12px;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+.skin-info {
+  font-size: 10px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+  margin-top: 4px;
+}
+.skin-card.equipped .skin-info { color: #44ff88; }
+
+/* ─── ACHIEVEMENTS ──────────────────────────────────────────── */
+.achievement-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.achievement-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(20, 20, 40, 0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 12px 16px;
+  opacity: 0.5;
+}
+.achievement-card.unlocked {
+  opacity: 1;
+  border-color: rgba(68, 255, 136, 0.3);
+  background: rgba(20, 40, 30, 0.5);
+}
+.achievement-icon {
+  font-size: 28px;
+  width: 40px;
+  text-align: center;
+}
+.achievement-info { flex: 1; }
+.achievement-name {
+  font-size: 14px;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+.achievement-desc {
+  font-size: 11px;
+  color: #777;
+  font-family: 'Courier New', monospace;
+  margin-top: 2px;
+}
+.achievement-reward {
+  font-size: 11px;
+  color: #ffaa00;
+  font-family: 'Courier New', monospace;
+  margin-top: 2px;
+}
+.achievement-status {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: #555;
+  letter-spacing: 2px;
+}
+.achievement-card.unlocked .achievement-status { color: #44ff88; }
+
+/* ─── FRIENDS ──────────────────────────────────────────────── */
+.friends-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.friends-input {
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  background: rgba(20, 20, 40, 0.8);
+  border: 1px solid rgba(68, 136, 255, 0.25);
+  padding: 10px 14px;
+  flex: 1;
+  max-width: 250px;
+  border-radius: 4px;
+  outline: none;
+}
+.friends-input:focus { border-color: rgba(68, 136, 255, 0.6); }
+.friends-add-btn {
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  color: #ccc;
+  background: rgba(40, 40, 60, 0.8);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  padding: 10px 20px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+.friends-add-btn:hover { color: #fff; border-color: rgba(68, 136, 255, 0.7); }
+.friend-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(20, 20, 40, 0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+}
+.friend-name {
+  font-size: 13px;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+}
+.friend-level {
+  font-size: 11px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+}
+.friend-accept-btn {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: #44ff88;
+  background: rgba(68, 255, 136, 0.1);
+  border: 1px solid rgba(68, 255, 136, 0.3);
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+.friend-accept-btn:hover {
+  background: rgba(68, 255, 136, 0.2);
+  border-color: rgba(68, 255, 136, 0.6);
+}
+.friends-empty, .friends-login-prompt {
+  font-size: 13px;
+  color: #555;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ─── ACHIEVEMENT TOAST ──────────────────────────────────────── */
+.achievement-toast-container {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+}
+.achievement-toast {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: rgba(10, 30, 20, 0.95);
+  border: 1px solid rgba(68, 255, 136, 0.4);
+  border-radius: 6px;
+  padding: 12px 20px;
+  box-shadow: 0 0 20px rgba(68, 255, 136, 0.2);
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity 0.3s, transform 0.3s;
+  min-width: 280px;
+}
+.achievement-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.achievement-toast.fading {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+.toast-icon {
+  font-size: 32px;
+  width: 40px;
+  text-align: center;
+}
+.toast-body { flex: 1; }
+.toast-title {
+  font-size: 10px;
+  color: #44ff88;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 3px;
+  margin-bottom: 2px;
+}
+.toast-name {
+  font-size: 15px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+}
+.toast-desc {
+  font-size: 11px;
+  color: #999;
+  font-family: 'Courier New', monospace;
+}
+.toast-xp {
+  font-size: 12px;
+  color: #ffaa00;
+  font-family: 'Courier New', monospace;
+  margin-top: 2px;
 }

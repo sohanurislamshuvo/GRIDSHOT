@@ -47,16 +47,45 @@ export class AssetManager {
     }
 
     // Scattered scorch / stain marks
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 8; i++) {
       const cx = Math.random() * 512;
       const cy = Math.random() * 512;
-      const r = 8 + Math.random() * 20;
+      const r = 8 + Math.random() * 25;
       const grad = gCtx.createRadialGradient(cx, cy, 0, cx, cy, r);
       grad.addColorStop(0, 'rgba(10, 10, 12, 0.4)');
       grad.addColorStop(1, 'rgba(10, 10, 12, 0)');
       gCtx.fillStyle = grad;
       gCtx.fillRect(cx - r, cy - r, r * 2, r * 2);
     }
+
+    // Tire track marks (parallel dark lines)
+    gCtx.strokeStyle = 'rgba(18, 18, 22, 0.3)';
+    gCtx.lineWidth = 3;
+    for (let t = 0; t < 3; t++) {
+      const startX = Math.random() * 512;
+      const startY = Math.random() * 512;
+      const angle = Math.random() * Math.PI;
+      const len = 80 + Math.random() * 120;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      // Two parallel lines (tire tracks)
+      for (const offset of [-4, 4]) {
+        gCtx.beginPath();
+        gCtx.moveTo(startX + dy * offset, startY - dx * offset);
+        gCtx.lineTo(startX + dx * len + dy * offset, startY + dy * len - dx * offset);
+        gCtx.stroke();
+      }
+    }
+
+    // Worn paint / lane markings (faded yellow)
+    gCtx.strokeStyle = 'rgba(80, 70, 30, 0.15)';
+    gCtx.lineWidth = 4;
+    gCtx.setLineDash([12, 20]);
+    gCtx.beginPath();
+    gCtx.moveTo(0, 256);
+    gCtx.lineTo(512, 256);
+    gCtx.stroke();
+    gCtx.setLineDash([]);
 
     const groundTexture = new THREE.CanvasTexture(groundCanvas);
     groundTexture.wrapS = THREE.RepeatWrapping;
@@ -411,9 +440,35 @@ export class AssetManager {
       transparent: true, opacity: 0.5, depthWrite: false
     });
 
-    // Water geometry
-    this._geometries.waterPool = new THREE.CircleGeometry(70, 32);
+    // Water geometry (high subdivision for vertex displacement)
+    this._geometries.waterPool = new THREE.CircleGeometry(70, 48, 8);
     this._geometries.waterEdgeRing = new THREE.RingGeometry(68, 85, 32);
+
+    // ─── LAMP POST MATERIALS ────────────────────────────────────
+    this._materials.lampPole = new THREE.MeshStandardMaterial({
+      color: 0x444450, roughness: 0.4, metalness: 0.7
+    });
+    this._materials.lampBulb = new THREE.MeshStandardMaterial({
+      color: 0xffeedd, emissive: 0xffddaa, emissiveIntensity: 2.5,
+      roughness: 0.1, metalness: 0.1
+    });
+    this._materials.lampArm = new THREE.MeshStandardMaterial({
+      color: 0x555560, roughness: 0.5, metalness: 0.6
+    });
+
+    // Lamp post geometries
+    this._geometries.lampPole = new THREE.CylinderGeometry(1.5, 2, 50, 6);
+    this._geometries.lampBulb = new THREE.SphereGeometry(3, 8, 8);
+    this._geometries.lampArm = new THREE.CylinderGeometry(0.8, 0.8, 10, 4);
+
+    // ─── WALL ACCENT STRIP ──────────────────────────────────────
+    this._materials.wallAccent = new THREE.MeshStandardMaterial({
+      color: 0x334466, emissive: 0x223355, emissiveIntensity: 1.2,
+      roughness: 0.2, metalness: 0.6
+    });
+    this._geometries.wallAccent = new THREE.BoxGeometry(
+      GameConfig.TILE_SIZE - 1, 1.5, GameConfig.TILE_SIZE - 1
+    );
   }
 
   getMaterial(name) { return this._materials[name]; }

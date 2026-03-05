@@ -14,6 +14,8 @@ export class InputManager {
     this._justPressed = {};
     this._escape = false;
     this._viewToggle = false;
+    this._weaponSwitch = 0;
+    this._scrollSwitch = 0;
 
     // Camera mode (set by Game.js)
     this.cameraMode = 'tpp';
@@ -54,6 +56,10 @@ export class InputManager {
         }
       }
       if (e.code === 'KeyV') this._viewToggle = true;
+      // Weapon switch keys 1-5
+      if (e.code >= 'Digit1' && e.code <= 'Digit5') {
+        this._weaponSwitch = parseInt(e.code.charAt(5));
+      }
     };
     const onKeyUp = (e) => {
       this._keys[e.code] = false;
@@ -120,12 +126,18 @@ export class InputManager {
     document.addEventListener('mousedown', onDown);
     document.addEventListener('mouseup', onUp);
 
+    const onWheel = (e) => {
+      this._scrollSwitch = e.deltaY > 0 ? 1 : -1;
+    };
+
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener('wheel', onWheel, { passive: true });
 
     this._cleanupFns.push(
       () => document.removeEventListener('mousemove', onMove),
       () => document.removeEventListener('mousedown', onDown),
-      () => document.removeEventListener('mouseup', onUp)
+      () => document.removeEventListener('mouseup', onUp),
+      () => document.removeEventListener('wheel', onWheel)
     );
   }
 
@@ -162,6 +174,11 @@ export class InputManager {
     const viewToggle = this._viewToggle;
     this._viewToggle = false;
 
+    const weaponSwitch = this._weaponSwitch;
+    this._weaponSwitch = 0;
+    const scrollSwitch = this._scrollSwitch;
+    this._scrollSwitch = 0;
+
     return {
       up: !!this._keys['KeyW'],
       down: !!this._keys['KeyS'],
@@ -172,7 +189,9 @@ export class InputManager {
       shoot: this._shooting,
       ability,
       escape,
-      viewToggle
+      viewToggle,
+      weaponSwitch,
+      scrollSwitch
     };
   }
 

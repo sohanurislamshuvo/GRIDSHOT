@@ -5,22 +5,16 @@ export class RoomManager {
   constructor(io) {
     this.io = io;
     this.rooms = new Map();        // roomId -> Room
+    this.roomsByCode = new Map();  // code -> Room
     this.playerRooms = new Map();  // socketId -> roomId
-    this.queues = {
-      duel: [],      // Array of sockets
-      team2v2: [],
-      team3v3: []
-    };
-
-    // Check queues periodically
-    setInterval(() => this.processQueues(), 1000);
 
     // Clean up empty rooms periodically
     setInterval(() => this.cleanupRooms(), 10000);
   }
 
-  createSoloRoom(socket) {
-    const room = new Room(this.io, 'solo');
+  createSoloRoom(socket, mapId = 'arena') {
+    const room = new Room(this.io, 'solo', mapId);
+    room.hostId = socket.id;
     room.addPlayer(socket);
     room.startMatch();
 
@@ -30,69 +24,89 @@ export class RoomManager {
     return room;
   }
 
-  addToQueue(socket, mode) {
-    if (!this.queues[mode]) {
-      socket.emit(MessageTypes.ERROR, { message: 'Invalid game mode' });
+  createLobbyRoom(socket, mode, mapId = 'arena') {
+    // Remove player from any existing room first
+    this.handleDisconnect(socket.id);
+
+    const room = new Room(this.io, mode, mapId);
+    room.hostId = socket.id;
+    room.addPlayer(socket);
+
+    this.rooms.set(room.id, room);
+    this.roomsByCode.set(room.code, room);
+    this.playerRooms.set(socket.id, room.id);
+
+    socket.emit(MessageTypes.ROOM_CREATED, {
+      code: room.code,
+      mode,
+      players: room.getLobbyPlayerList(),
+      maxPlayers: room.settings.maxPlayers,
+      isHost: true
+    });
+  }
+
+  joinByCode(socket, code) {
+    const normalizedCode = (code || '').trim().toUpperCase();
+    const room = this.roomsByCode.get(normalizedCode);
+
+    if (!room) {
+      socket.emit(MessageTypes.JOIN_FAILED, { reason: 'Room not found. Check the code and try again.' });
       return;
     }
 
-    // Remove from any existing queue
-    this.removeFromQueue(socket.id);
+    if (room.lobbyState !== 'waiting') {
+      socket.emit(MessageTypes.JOIN_FAILED, { reason: 'Match already started.' });
+      return;
+    }
 
-    this.queues[mode].push(socket);
-    socket.emit('queue_joined', { mode, position: this.queues[mode].length });
+    if (room.players.size >= room.settings.maxPlayers) {
+      socket.emit(MessageTypes.JOIN_FAILED, { reason: 'Room is full.' });
+      return;
+    }
+
+    // Remove from any existing room first
+    this.handleDisconnect(socket.id);
+
+    room.addPlayer(socket);
+    this.playerRooms.set(socket.id, room.id);
+
+    // Notify the joiner
+    socket.emit(MessageTypes.ROOM_JOINED, {
+      code: room.code,
+      mode: room.mode,
+      players: room.getLobbyPlayerList(),
+      maxPlayers: room.settings.maxPlayers,
+      isHost: false
+    });
+
+    // Notify all in room about updated player list
+    this.io.to(room.id).emit(MessageTypes.ROOM_UPDATE, {
+      players: room.getLobbyPlayerList(),
+      maxPlayers: room.settings.maxPlayers
+    });
   }
 
-  removeFromQueue(socketId) {
-    for (const [mode, queue] of Object.entries(this.queues)) {
-      const idx = queue.findIndex(s => s.id === socketId);
-      if (idx !== -1) {
-        queue.splice(idx, 1);
-        return;
-      }
-    }
-  }
+  startMatch(socket) {
+    const room = this.getPlayerRoom(socket.id);
+    if (!room) return;
 
-  processQueues() {
-    // Duel: need 2 players
-    while (this.queues.duel.length >= 2) {
-      const players = this.queues.duel.splice(0, 2);
-      this.createMatchRoom('duel', players);
+    if (room.hostId !== socket.id) {
+      socket.emit(MessageTypes.JOIN_FAILED, { reason: 'Only the host can start the match.' });
+      return;
     }
 
-    // 2v2: need 4 players
-    while (this.queues.team2v2.length >= 4) {
-      const players = this.queues.team2v2.splice(0, 4);
-      this.createMatchRoom('team2v2', players);
+    if (room.lobbyState !== 'waiting') return;
+
+    const required = room.settings.maxPlayers;
+    if (room.players.size < required) {
+      socket.emit(MessageTypes.JOIN_FAILED, { reason: `Need ${required} players to start. Currently ${room.players.size}/${required}.` });
+      return;
     }
 
-    // 3v3: need 6 players
-    while (this.queues.team3v3.length >= 6) {
-      const players = this.queues.team3v3.splice(0, 6);
-      this.createMatchRoom('team3v3', players);
-    }
-  }
-
-  createMatchRoom(mode, sockets) {
-    const room = new Room(this.io, mode);
-
-    for (const socket of sockets) {
-      room.addPlayer(socket);
-      this.playerRooms.set(socket.id, room.id);
-    }
+    // Remove from code lookup (code no longer usable)
+    this.roomsByCode.delete(room.code);
 
     room.startMatch();
-    this.rooms.set(room.id, room);
-
-    // Notify players
-    for (const socket of sockets) {
-      socket.emit(MessageTypes.MATCH_FOUND, {
-        roomId: room.id,
-        mode
-      });
-    }
-
-    return room;
   }
 
   getPlayerRoom(socketId) {
@@ -102,25 +116,41 @@ export class RoomManager {
   }
 
   handleDisconnect(socketId) {
-    // Remove from queue
-    this.removeFromQueue(socketId);
-
-    // Remove from room
     const roomId = this.playerRooms.get(socketId);
-    if (roomId) {
-      const room = this.rooms.get(roomId);
-      if (room) {
-        room.removePlayer(socketId);
+    if (!roomId) return;
+
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.removePlayer(socketId);
+
+      // If room is in lobby and has players, handle host transfer
+      if (room.lobbyState === 'waiting' && room.players.size > 0) {
+        if (room.hostId === socketId) {
+          // Transfer host to next player
+          const nextHostId = room.players.keys().next().value;
+          room.hostId = nextHostId;
+        }
+        // Notify remaining players
+        this.io.to(room.id).emit(MessageTypes.ROOM_UPDATE, {
+          players: room.getLobbyPlayerList(),
+          maxPlayers: room.settings.maxPlayers
+        });
       }
-      this.playerRooms.delete(socketId);
+
+      // If room is empty and still in lobby, clean up code
+      if (room.players.size === 0 && room.lobbyState === 'waiting') {
+        this.roomsByCode.delete(room.code);
+      }
     }
+
+    this.playerRooms.delete(socketId);
   }
 
   cleanupRooms() {
     for (const [id, room] of this.rooms.entries()) {
       if (!room.active) {
+        this.roomsByCode.delete(room.code);
         this.rooms.delete(id);
-        // Clean up player mappings
         for (const [socketId, roomId] of this.playerRooms.entries()) {
           if (roomId === id) {
             this.playerRooms.delete(socketId);

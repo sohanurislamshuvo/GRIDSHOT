@@ -25,7 +25,7 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+    origin: true,
     methods: ['GET', 'POST']
   }
 });
@@ -46,7 +46,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api', createRoutes(playerRepo));
 
 // Initialize game server
-const gameServer = new GameServer(io);
+const gameServer = new GameServer(io, playerRepo);
 gameServer.start();
 
 const PORT = process.env.PORT || 3000;

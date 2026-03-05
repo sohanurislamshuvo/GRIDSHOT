@@ -2,9 +2,11 @@ export const MessageTypes = {
   // Client -> Server
   PLAYER_INPUT: 'player_input',
   USE_ABILITY: 'use_ability',
-  JOIN_QUEUE: 'join_queue',
-  LEAVE_QUEUE: 'leave_queue',
+  SWITCH_WEAPON: 'switch_weapon',
   START_SOLO: 'start_solo',
+  CREATE_ROOM: 'create_room',
+  JOIN_ROOM: 'join_room',
+  START_MATCH: 'start_match',
 
   // Server -> Client
   SNAPSHOT: 'snapshot',
@@ -12,7 +14,10 @@ export const MessageTypes = {
   PLAYER_LEFT: 'player_left',
   HIT_CONFIRM: 'hit_confirm',
   ABILITY_RESULT: 'ability_result',
-  MATCH_FOUND: 'match_found',
+  ROOM_CREATED: 'room_created',
+  ROOM_JOINED: 'room_joined',
+  ROOM_UPDATE: 'room_update',
+  JOIN_FAILED: 'join_failed',
   MATCH_START: 'match_start',
   MATCH_END: 'match_end',
   WAVE_START: 'wave_start',
@@ -22,6 +27,32 @@ export const MessageTypes = {
   PLAYER_RESPAWN: 'player_respawn',
   XP_GAINED: 'xp_gained',
   LEVEL_UP: 'level_up',
+
+  // Pickups
+  ITEM_PICKED_UP: 'item_picked_up',
+  ITEM_RESPAWNED: 'item_respawned',
+
+  // Battle Royale
+  ZONE_UPDATE: 'zone_update',
+  BR_ELIMINATED: 'br_eliminated',
+  BR_VICTORY: 'br_victory',
+
+  // CTF
+  FLAG_UPDATE: 'flag_update',
+
+  // KOTH
+  HILL_UPDATE: 'hill_update',
+
+  // Destructibles
+  DESTRUCTIBLE_DESTROYED: 'destructible_destroyed',
+  DESTRUCTIBLE_RESPAWNED: 'destructible_respawned',
+
+  // Achievements
+  ACHIEVEMENT_UNLOCKED: 'achievement_unlocked',
+
+  // Cosmetics
+  EQUIP_SKIN: 'equip_skin',
+  EQUIP_TRAIL: 'equip_trail',
 
   // Bidirectional
   CHAT: 'chat',

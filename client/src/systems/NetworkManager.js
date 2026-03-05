@@ -10,6 +10,14 @@ export class NetworkManager {
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.serverSnapshots = [];
+
+    // Lobby callbacks
+    this.onRoomCreated = null;
+    this.onRoomJoined = null;
+    this.onRoomUpdate = null;
+    this.onJoinFailed = null;
+
+    // Match callbacks
     this.onSnapshot = null;
     this.onMatchStart = null;
     this.onMatchEnd = null;
@@ -20,6 +28,11 @@ export class NetworkManager {
     this.onHitConfirm = null;
     this.onAbilityResult = null;
     this.onRadarReveal = null;
+    this.onZoneUpdate = null;
+    this.onBREliminated = null;
+    this.onFlagUpdate = null;
+    this.onHillUpdate = null;
+    this.onAchievementUnlocked = null;
   }
 
   connect() {
@@ -44,12 +57,25 @@ export class NetworkManager {
       console.log('Disconnected from server');
     });
 
-    this.socket.on(MessageTypes.MATCH_START, (data) => {
-      this.roomId = data.roomId;
-      if (this.onMatchStart) this.onMatchStart(data);
+    // Lobby events
+    this.socket.on(MessageTypes.ROOM_CREATED, (data) => {
+      if (this.onRoomCreated) this.onRoomCreated(data);
     });
 
-    this.socket.on(MessageTypes.MATCH_FOUND, (data) => {
+    this.socket.on(MessageTypes.ROOM_JOINED, (data) => {
+      if (this.onRoomJoined) this.onRoomJoined(data);
+    });
+
+    this.socket.on(MessageTypes.ROOM_UPDATE, (data) => {
+      if (this.onRoomUpdate) this.onRoomUpdate(data);
+    });
+
+    this.socket.on(MessageTypes.JOIN_FAILED, (data) => {
+      if (this.onJoinFailed) this.onJoinFailed(data);
+    });
+
+    // Match events
+    this.socket.on(MessageTypes.MATCH_START, (data) => {
       this.roomId = data.roomId;
       if (this.onMatchStart) this.onMatchStart(data);
     });
@@ -92,24 +118,51 @@ export class NetworkManager {
       if (this.onRadarReveal) this.onRadarReveal(data);
     });
 
-    this.socket.on('queue_joined', (data) => {
-      console.log(`Joined ${data.mode} queue, position: ${data.position}`);
+    this.socket.on(MessageTypes.ZONE_UPDATE, (data) => {
+      if (this.onZoneUpdate) this.onZoneUpdate(data);
+    });
+
+    this.socket.on(MessageTypes.BR_ELIMINATED, (data) => {
+      if (this.onBREliminated) this.onBREliminated(data);
+    });
+
+    this.socket.on(MessageTypes.FLAG_UPDATE, (data) => {
+      if (this.onFlagUpdate) this.onFlagUpdate(data);
+    });
+
+    this.socket.on(MessageTypes.HILL_UPDATE, (data) => {
+      if (this.onHillUpdate) this.onHillUpdate(data);
+    });
+
+    this.socket.on(MessageTypes.ACHIEVEMENT_UNLOCKED, (data) => {
+      if (this.onAchievementUnlocked) this.onAchievementUnlocked(data);
     });
   }
 
-  startSolo() {
+  authenticate(playerId, username) {
     if (!this.connected) return;
-    this.socket.emit(MessageTypes.START_SOLO);
+    this.socket.emit('authenticate', { playerId, username });
   }
 
-  joinQueue(mode) {
+  // Lobby actions
+  createRoom(mode, mapId = 'arena') {
     if (!this.connected) return;
-    this.socket.emit(MessageTypes.JOIN_QUEUE, { mode });
+    this.socket.emit(MessageTypes.CREATE_ROOM, { mode, mapId });
   }
 
-  leaveQueue() {
+  joinRoom(code) {
     if (!this.connected) return;
-    this.socket.emit(MessageTypes.LEAVE_QUEUE);
+    this.socket.emit(MessageTypes.JOIN_ROOM, { code });
+  }
+
+  requestStartMatch() {
+    if (!this.connected) return;
+    this.socket.emit(MessageTypes.START_MATCH);
+  }
+
+  startSolo(mapId = 'arena') {
+    if (!this.connected) return;
+    this.socket.emit(MessageTypes.START_SOLO, { mapId });
   }
 
   sendInput(input) {
@@ -124,6 +177,11 @@ export class NetworkManager {
   sendAbility(abilityName) {
     if (!this.connected) return;
     this.socket.emit(MessageTypes.USE_ABILITY, { ability: abilityName });
+  }
+
+  sendWeaponSwitch(weaponType) {
+    if (!this.connected) return;
+    this.socket.emit(MessageTypes.SWITCH_WEAPON, { weaponType });
   }
 
   reconcile(serverPlayerState) {

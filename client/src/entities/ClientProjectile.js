@@ -1,45 +1,37 @@
-import * as THREE from 'three';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
+import { WeaponConfig } from 'shadow-arena-shared/config/WeaponConfig.js';
 
 export class ClientProjectile {
-  constructor(game, x, y, angle, isPlayerBullet = true) {
+  constructor(game, x, y, angle, isPlayerBullet = true, weaponType = 'auto_rifle') {
     this.game = game;
-    this.scene = game.renderer.scene;
+    this.pool = game.projectilePool;
+    this.weaponType = weaponType;
+
+    const wep = WeaponConfig[weaponType] || WeaponConfig['auto_rifle'];
 
     // Game state
     this.x = x;
     this.y = y;
     this.angle = angle;
-    this.radius = GameConfig.BULLET_RADIUS;
-    this.damage = GameConfig.BULLET_DAMAGE;
+    this.radius = wep.bulletRadius;
+    this.damage = wep.damage;
     this.alive = true;
     this.isPlayerBullet = isPlayerBullet;
     this.serverId = null;
 
     // Velocity
-    this.vx = Math.cos(angle) * GameConfig.BULLET_SPEED;
-    this.vy = Math.sin(angle) * GameConfig.BULLET_SPEED;
+    this.vx = Math.cos(angle) * wep.bulletSpeed;
+    this.vy = Math.sin(angle) * wep.bulletSpeed;
 
     // Lifetime
     this._createdAt = performance.now();
+    this._lifetime = wep.bulletLifetime;
 
-    // 3D mesh — elongated tracer
-    const tracerGeo = game.assets.getGeometry('bulletTracer');
-    const mat = isPlayerBullet
-      ? game.assets.getMaterial('bulletPlayer')
-      : game.assets.getMaterial('bulletBot');
-    this.mesh = new THREE.Mesh(tracerGeo, mat);
-    this.mesh.position.set(x, 10, y);
-    // Rotate tracer to align with travel direction
-    this.mesh.rotation.z = Math.PI / 2;
-    this.mesh.rotation.y = -angle + Math.PI / 2;
-    this.scene.add(this.mesh);
-
-    // Point light for glow (brighter for bloom)
-    const glowColor = isPlayerBullet ? 0xffff00 : 0xff6666;
-    this.light = new THREE.PointLight(glowColor, 1.0, 50);
-    this.light.position.set(x, 10, y);
-    this.scene.add(this.light);
+    // Allocate an instance slot from the pool
+    this._poolIndex = this.pool.allocate(isPlayerBullet);
+    if (this._poolIndex >= 0) {
+      this.pool.updateInstance(this._poolIndex, isPlayerBullet, x, y, angle);
+    }
   }
 
   update(dt) {
@@ -49,20 +41,22 @@ export class ClientProjectile {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Sync 3D
-    this.mesh.position.set(this.x, 10, this.y);
-    this.light.position.set(this.x, 10, this.y);
+    // Update pool instance position
+    if (this._poolIndex >= 0) {
+      this.pool.updateInstance(this._poolIndex, this.isPlayerBullet, this.x, this.y, this.angle);
+    }
 
-    // Trail particles (more visible tracer effect)
+    // Trail particles (use weapon tracer color for player bullets)
     if (Math.random() < 0.6) {
-      const color = this.isPlayerBullet ? 0xffff88 : 0xff8888;
+      const wep = WeaponConfig[this.weaponType];
+      const color = this.isPlayerBullet ? (wep ? wep.tracerColor : 0xffff88) : 0xff8888;
       this.game.particles.emit(this.x, 10, this.y, {
         count: 1, speed: 8, color, lifetime: 0.12, size: 1.5
       });
     }
 
     // Check lifetime
-    if (performance.now() - this._createdAt > GameConfig.BULLET_LIFETIME) {
+    if (performance.now() - this._createdAt > this._lifetime) {
       this.destroy();
       return;
     }
@@ -76,15 +70,16 @@ export class ClientProjectile {
   setPosition(x, y) {
     this.x = x;
     this.y = y;
-    this.mesh.position.set(x, 10, y);
-    this.light.position.set(x, 10, y);
+    if (this._poolIndex >= 0) {
+      this.pool.updateInstance(this._poolIndex, this.isPlayerBullet, x, y, this.angle);
+    }
   }
 
   destroy() {
     this.alive = false;
-    this.scene.remove(this.mesh);
-    this.scene.remove(this.light);
-    this.mesh.geometry?.dispose();
-    this.light.dispose();
+    if (this._poolIndex >= 0) {
+      this.pool.release(this._poolIndex, this.isPlayerBullet);
+      this._poolIndex = -1;
+    }
   }
 }

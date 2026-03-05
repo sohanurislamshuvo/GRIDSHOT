@@ -76,6 +76,12 @@ export class ClientBot {
       color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.0
     });
 
+    // Reusable muzzle flash light
+    this._muzzleLight = new THREE.PointLight(0xff8844, 0, 30);
+    this._muzzleLight.visible = false;
+    this.scene.add(this._muzzleLight);
+    this._muzzleLightTimer = null;
+
     // Walk animation
     this._walkPhase = 0;
 
@@ -175,11 +181,15 @@ export class ClientBot {
       count: 3, speed: 40, color: 0xffaa44, lifetime: 0.06, size: 2.5
     });
 
-    // Brief muzzle light
-    const flash = new THREE.PointLight(0xff8844, 1.5, 30);
-    flash.position.set(bx, 14, by);
-    this.scene.add(flash);
-    setTimeout(() => { this.scene.remove(flash); flash.dispose(); }, 40);
+    // Reuse muzzle flash light
+    this._muzzleLight.position.set(bx, 14, by);
+    this._muzzleLight.intensity = 1.5;
+    this._muzzleLight.visible = true;
+    if (this._muzzleLightTimer) clearTimeout(this._muzzleLightTimer);
+    this._muzzleLightTimer = setTimeout(() => {
+      this._muzzleLight.intensity = 0;
+      this._muzzleLight.visible = false;
+    }, 40);
 
     this.game.spawnBotBullet(bx, by, angle, this.damage);
   }
@@ -265,6 +275,9 @@ export class ClientBot {
   destroy() {
     this.scene.remove(this.group);
     this.scene.remove(this.shadow);
+    this.scene.remove(this._muzzleLight);
+    if (this._muzzleLightTimer) clearTimeout(this._muzzleLightTimer);
+    this._muzzleLight.dispose();
     this.group.traverse(child => {
       if (child.geometry) child.geometry.dispose();
     });

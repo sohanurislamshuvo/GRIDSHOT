@@ -146,7 +146,8 @@ export class BotAI {
 
   pickNewWaypoint() {
     const margin = 100;
-    this.bot.waypointX = randomInRange(margin, GameConfig.WORLD_WIDTH - margin);
-    this.bot.waypointY = randomInRange(margin, GameConfig.WORLD_HEIGHT - margin);
+    const mc = this.room.mapConfig;
+    this.bot.waypointX = randomInRange(margin, mc.width - margin);
+    this.bot.waypointY = randomInRange(margin, mc.height - margin);
   }
 }

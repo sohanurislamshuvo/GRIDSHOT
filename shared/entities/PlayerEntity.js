@@ -1,5 +1,6 @@
 import { Entity } from './Entity.js';
 import { GameConfig } from '../config/GameConfig.js';
+import { WeaponType, WeaponConfig } from '../config/WeaponConfig.js';
 import { normalize } from '../utils/Vector2.js';
 
 export class PlayerEntity extends Entity {
@@ -15,9 +16,17 @@ export class PlayerEntity extends Entity {
     this.kills = 0;
     this.deaths = 0;
 
-    // Shooting
+    // Weapon system
+    this.weaponType = WeaponType.AUTO_RIFLE;
+    this.loadout = {
+      primary: WeaponType.AUTO_RIFLE,
+      secondary: WeaponType.PISTOL
+    };
+    this.activeSlot = 'primary';
+
+    // Shooting (derived from weapon config)
     this.lastShotTime = 0;
-    this.fireRate = GameConfig.FIRE_RATE;
+    this.fireRate = WeaponConfig[this.weaponType].fireRate;
 
     // Abilities
     this.abilities = {
@@ -96,6 +105,19 @@ export class PlayerEntity extends Entity {
     this.isDashing = false;
   }
 
+  setWeapon(weaponType) {
+    const def = WeaponConfig[weaponType];
+    if (!def) return;
+    this.weaponType = weaponType;
+    this.fireRate = def.fireRate;
+  }
+
+  switchSlot(slot) {
+    if (slot !== 'primary' && slot !== 'secondary') return;
+    this.activeSlot = slot;
+    this.setWeapon(this.loadout[slot]);
+  }
+
   serialize() {
     return {
       ...super.serialize(),
@@ -105,6 +127,7 @@ export class PlayerEntity extends Entity {
       team: this.team,
       kills: this.kills,
       deaths: this.deaths,
+      weaponType: this.weaponType,
       shieldActive: this.shieldActive,
       healActive: this.healActive,
       radarActive: this.radarActive,

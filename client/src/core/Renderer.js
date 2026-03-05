@@ -39,15 +39,34 @@ const ColorGradeShader = {
   `
 };
 
+export const Quality = { LOW: 0, MEDIUM: 1, HIGH: 2 };
+
 const VIEW_MODES = ['tpp', 'shoulder', 'fpp'];
 const FOV = { tpp: 45, shoulder: 55, fpp: 70 };
 
+/** Auto-detect appropriate quality tier */
+function detectQuality() {
+  // Check localStorage first
+  const saved = localStorage.getItem('shadow-arena-quality');
+  if (saved !== null) return parseInt(saved, 10);
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || ('ontouchstart' in window && navigator.maxTouchPoints > 1);
+  if (isMobile) return Quality.LOW;
+
+  const cores = navigator.hardwareConcurrency || 2;
+  if (cores >= 8) return Quality.HIGH;
+  if (cores >= 4) return Quality.MEDIUM;
+  return Quality.LOW;
+}
+
 export class Renderer {
-  constructor(container) {
+  constructor(container, quality) {
     this.container = container;
     this.cameraMode = 'tpp';
+    this.quality = quality !== undefined ? quality : detectQuality();
 
-    // Three.js scene (no background — sky dome added by WorldBuilder)
+    // Three.js scene
     this.scene = new THREE.Scene();
 
     // Perspective camera
@@ -57,50 +76,29 @@ export class Renderer {
     this.camera.lookAt(1000, 0, 1000);
 
     // WebGL renderer
+    const pixelRatio = this.quality === Quality.LOW
+      ? 1
+      : Math.min(window.devicePixelRatio, this.quality === Quality.HIGH ? 2 : 1.5);
+
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.setPixelRatio(pixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.3;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // Shadows (disabled on LOW)
+    if (this.quality > Quality.LOW) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    } else {
+      this.renderer.shadowMap.enabled = false;
+    }
+
     container.appendChild(this.renderer.domElement);
 
-    // Post-processing pipeline: Render → GTAO → Bloom → SMAA → ColorGrade → Output
-    this.composer = new EffectComposer(this.renderer);
-    const renderPass = new RenderPass(this.scene, this.camera);
-    this.composer.addPass(renderPass);
-
-    // GTAO (ambient occlusion — contact shadows)
-    const gtaoPass = new GTAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight);
-    gtaoPass.output = GTAOPass.OUTPUT.Default;
-    gtaoPass.updateGtaoMaterial({ radius: 0.4, distanceExponent: 2, thickness: 5, scale: 1.0 });
-    gtaoPass.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 4, samples: 16 });
-    this.composer.addPass(gtaoPass);
-    this._gtaoPass = gtaoPass;
-
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.4, 0.6, 0.85
-    );
-    this.composer.addPass(bloomPass);
-    this._bloomPass = bloomPass;
-
-    const smaaPass = new SMAAPass(
-      window.innerWidth * this.renderer.getPixelRatio(),
-      window.innerHeight * this.renderer.getPixelRatio()
-    );
-    this.composer.addPass(smaaPass);
-    this._smaaPass = smaaPass;
-
-    // Color grading (vignette + grain + tint)
-    const colorGradePass = new ShaderPass(ColorGradeShader);
-    this.composer.addPass(colorGradePass);
-    this._colorGradePass = colorGradePass;
-
-    const outputPass = new OutputPass();
-    this.composer.addPass(outputPass);
+    // Build post-processing pipeline based on quality tier
+    this._buildComposer();
 
     // CSS2D renderer for health bars / labels
     this.css2dRenderer = new CSS2DRenderer();
@@ -124,14 +122,101 @@ export class Renderer {
     // Target FOV for smooth transitions
     this._targetFov = 45;
 
-    window.addEventListener('resize', () => this._onResize());
+    this._resizeHandler = () => this._onResize();
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  _buildComposer() {
+    if (this.composer) this.composer.dispose();
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+    this._gtaoPass = null;
+    this._bloomPass = null;
+    this._smaaPass = null;
+    this._colorGradePass = null;
+
+    // HIGH: Full pipeline (GTAO + Bloom + SMAA + ColorGrade)
+    if (this.quality >= Quality.HIGH) {
+      const gtaoPass = new GTAOPass(this.scene, this.camera, w, h);
+      gtaoPass.output = GTAOPass.OUTPUT.Default;
+      gtaoPass.updateGtaoMaterial({ radius: 0.4, distanceExponent: 2, thickness: 5, scale: 1.0 });
+      gtaoPass.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 4, samples: 16 });
+      this.composer.addPass(gtaoPass);
+      this._gtaoPass = gtaoPass;
+    }
+
+    // MEDIUM+: Bloom (reduced strength on MEDIUM)
+    if (this.quality >= Quality.MEDIUM) {
+      const strength = this.quality === Quality.HIGH ? 0.4 : 0.25;
+      const threshold = this.quality === Quality.HIGH ? 0.6 : 0.9;
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), strength, threshold, 0.85);
+      this.composer.addPass(bloomPass);
+      this._bloomPass = bloomPass;
+    }
+
+    // HIGH: SMAA anti-aliasing
+    if (this.quality >= Quality.HIGH) {
+      const smaaPass = new SMAAPass(
+        w * this.renderer.getPixelRatio(),
+        h * this.renderer.getPixelRatio()
+      );
+      this.composer.addPass(smaaPass);
+      this._smaaPass = smaaPass;
+    }
+
+    // MEDIUM+: Color grading (vignette + grain + tint)
+    if (this.quality >= Quality.MEDIUM) {
+      const colorGradePass = new ShaderPass(ColorGradeShader);
+      this.composer.addPass(colorGradePass);
+      this._colorGradePass = colorGradePass;
+    }
+
+    this.composer.addPass(new OutputPass());
+  }
+
+  /** Get the shadow map size for the current quality */
+  getShadowMapSize() {
+    if (this.quality === Quality.HIGH) return 4096;
+    if (this.quality === Quality.MEDIUM) return 2048;
+    return 1024;
+  }
+
+  /** Change quality at runtime */
+  setQuality(level) {
+    if (level === this.quality) return;
+    this.quality = level;
+    localStorage.setItem('shadow-arena-quality', level);
+
+    const pixelRatio = level === Quality.LOW
+      ? 1
+      : Math.min(window.devicePixelRatio, level === Quality.HIGH ? 2 : 1.5);
+    this.renderer.setPixelRatio(pixelRatio);
+
+    if (level > Quality.LOW) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    } else {
+      this.renderer.shadowMap.enabled = false;
+    }
+    this.renderer.shadowMap.needsUpdate = true;
+
+    this._buildComposer();
+  }
+
+  /** Check if the renderer is running at mobile/low quality */
+  isMobile() {
+    return this.quality === Quality.LOW;
   }
 
   cycleViewMode() {
     const idx = VIEW_MODES.indexOf(this.cameraMode);
     this.cameraMode = VIEW_MODES[(idx + 1) % VIEW_MODES.length];
     this._targetFov = FOV[this.cameraMode];
-    // Adjust near plane for close views
     this.camera.near = this.cameraMode === 'fpp' ? 0.5 : 1;
     this.camera.updateProjectionMatrix();
     return this.cameraMode;
@@ -171,13 +256,10 @@ export class Renderer {
   }
 
   _followShoulder(gameX, gameY, rotation, lerp) {
-    // Behind and slightly right of player
     const behindDist = 40;
     const rightOffset = 12;
     const height = 30;
 
-    // "Behind" is opposite to where player faces
-    // rotation is the game aim angle (in XZ plane)
     const behindX = -Math.cos(rotation) * behindDist + Math.sin(rotation) * rightOffset;
     const behindZ = -Math.sin(rotation) * behindDist - Math.cos(rotation) * rightOffset;
 
@@ -189,7 +271,6 @@ export class Renderer {
     this.camera.position.y += (targetY - this.camera.position.y) * lerp;
     this.camera.position.z += (targetZ - this.camera.position.z) * lerp;
 
-    // Look at player torso height, slightly ahead
     const lookAheadDist = 10;
     this.camera.lookAt(
       gameX + Math.cos(rotation) * lookAheadDist,
@@ -208,7 +289,6 @@ export class Renderer {
     this.camera.position.y += (targetY - this.camera.position.y) * 0.3;
     this.camera.position.z += (targetZ - this.camera.position.z) * 0.3;
 
-    // Look in aim direction with pitch
     const lookDist = 100;
     const lookX = gameX + Math.cos(rotation) * lookDist;
     const lookY = headHeight + Math.sin(pitch) * lookDist;
@@ -225,7 +305,6 @@ export class Renderer {
     this.camera.position.z += (targetZ - this.camera.position.z) * 0.08;
     this.camera.lookAt(gameX, 0, gameZ);
 
-    // Wider FOV for map overview
     if (Math.abs(this.camera.fov - 60) > 0.1) {
       this.camera.fov += (60 - this.camera.fov) * 0.1;
       this.camera.updateProjectionMatrix();
@@ -233,17 +312,15 @@ export class Renderer {
   }
 
   descendCamera(gameX, gameZ, progress) {
-    // progress: 0 (sky) → 1 (ground/TPP)
     const skyHeight = 1200;
     const tppHeight = 800;
-    const ease = progress * (2 - progress); // ease-out
+    const ease = progress * (2 - progress);
     const height = skyHeight + (tppHeight - skyHeight) * ease;
-    const zOffset = 100 + (350 - 100) * ease; // from skydive offset to TPP offset
+    const zOffset = 100 + (350 - 100) * ease;
 
     this.camera.position.set(gameX, height, gameZ + zOffset);
     this.camera.lookAt(gameX, 0, gameZ);
 
-    // Transition FOV from 60 → 45
     const fov = 60 + (45 - 60) * ease;
     this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
@@ -281,13 +358,13 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
-    this._bloomPass.resolution.set(w, h);
+    if (this._bloomPass) this._bloomPass.resolution.set(w, h);
     if (this._gtaoPass) this._gtaoPass.setSize(w, h);
     this.css2dRenderer.setSize(w, h);
   }
 
   dispose() {
-    window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('resize', this._resizeHandler);
     this.composer.dispose();
     this.renderer.dispose();
     this.container.removeChild(this.renderer.domElement);

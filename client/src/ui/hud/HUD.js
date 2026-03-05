@@ -1,3 +1,19 @@
+const WEAPON_NAMES = {
+  auto_rifle: 'AUTO RIFLE',
+  pistol: 'PISTOL',
+  smg: 'SMG',
+  shotgun: 'SHOTGUN',
+  sniper: 'SNIPER'
+};
+
+const WEAPON_INDEX = {
+  auto_rifle: 0,
+  pistol: 1,
+  smg: 2,
+  shotgun: 3,
+  sniper: 4
+};
+
 export class HUD {
   constructor(root) {
     this.el = document.createElement('div');
@@ -7,6 +23,7 @@ export class HUD {
       <div class="hud-top-left">
         <div class="hud-health-text">HP: 100/100</div>
         <div class="hud-health-bar">
+          <div class="hud-health-ghost"></div>
           <div class="hud-health-fill"></div>
         </div>
         <div class="hud-stats">K: 0 | D: 0</div>
@@ -45,6 +62,13 @@ export class HUD {
         </div>
       </div>
       <div class="hud-bottom-right">
+        <div class="hud-weapon-slots">
+          <span class="hud-wslot active" data-idx="0">1</span>
+          <span class="hud-wslot" data-idx="1">2</span>
+          <span class="hud-wslot" data-idx="2">3</span>
+          <span class="hud-wslot" data-idx="3">4</span>
+          <span class="hud-wslot" data-idx="4">5</span>
+        </div>
         <div class="hud-weapon-name">AUTO RIFLE</div>
         <div class="hud-weapon-ammo">&infin;</div>
       </div>
@@ -60,13 +84,14 @@ export class HUD {
       </div>
       <div class="hud-result"></div>
       <div class="hud-minimap">
-        <canvas class="minimap-canvas" width="160" height="160"></canvas>
+        <canvas class="minimap-canvas" width="200" height="200"></canvas>
       </div>
     `;
     root.appendChild(this.el);
 
     this._healthText = this.el.querySelector('.hud-health-text');
     this._healthFill = this.el.querySelector('.hud-health-fill');
+    this._healthGhost = this.el.querySelector('.hud-health-ghost');
     this._statsText = this.el.querySelector('.hud-stats');
     this._fpsEl = this.el.querySelector('.hud-fps');
     this._modeText = this.el.querySelector('.hud-mode');
@@ -81,6 +106,8 @@ export class HUD {
     this._compassCtx = this._compassCanvas.getContext('2d');
     this._skydiveEl = this.el.querySelector('.hud-skydive');
     this._skydiveAltEl = this.el.querySelector('.hud-skydive-alt');
+    this._weaponNameEl = this.el.querySelector('.hud-weapon-name');
+    this._weaponSlots = this.el.querySelectorAll('.hud-wslot');
     this._abilityEls = {};
 
     this.el.querySelectorAll('.hud-ability').forEach(el => {
@@ -98,6 +125,7 @@ export class HUD {
     this._radarEnemies = null;
     this._radarTimeout = null;
     this._wallGrid = null;
+    this._zoneData = null; // { x, y, radius }
 
     // Mobile labels
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -120,6 +148,14 @@ export class HUD {
     this._viewModeEl.textContent = labels[mode] || mode.toUpperCase();
     // Show crosshair in FPP and shoulder modes
     this._crosshair.style.display = (mode === 'tpp') ? 'none' : 'block';
+  }
+
+  setWeapon(weaponType) {
+    this._weaponNameEl.textContent = WEAPON_NAMES[weaponType] || 'AUTO RIFLE';
+    const idx = WEAPON_INDEX[weaponType] ?? 0;
+    this._weaponSlots.forEach((slot, i) => {
+      slot.classList.toggle('active', i === idx);
+    });
   }
 
   show(mode) {
@@ -160,13 +196,18 @@ export class HUD {
     }
     this._healthText.style.color = pct > 0.5 ? '#44ff44' : pct > 0.25 ? '#ffaa00' : '#ff4444';
 
-    // Health bar flash on damage
+    // Ghost health bar (delayed red fill showing recent damage)
     if (stats.health < this._prevHealth) {
+      // Set ghost to previous width, then animate it down after a delay
+      this._healthGhost.style.transition = 'none';
+      this._healthGhost.style.width = `${(this._prevHealth / stats.maxHealth) * 100}%`;
       this._healthFill.style.transition = 'none';
       this._healthFill.style.filter = 'brightness(2)';
       setTimeout(() => {
         this._healthFill.style.transition = 'width 0.15s';
         this._healthFill.style.filter = 'none';
+        this._healthGhost.style.transition = 'width 0.6s ease-out';
+        this._healthGhost.style.width = `${pct * 100}%`;
       }, 80);
     }
     this._prevHealth = stats.health;
@@ -183,12 +224,12 @@ export class HUD {
         const ui = this._abilityEls[name];
         if (!ui) continue;
         if (cd.ready) {
-          ui.overlay.style.width = '0%';
+          ui.overlay.style.setProperty('--cd-pct', '0%');
           ui.text.textContent = '';
           ui.el.classList.remove('on-cooldown');
         } else {
           const remainPct = (cd.remaining / cd.total) * 100;
-          ui.overlay.style.width = `${remainPct}%`;
+          ui.overlay.style.setProperty('--cd-pct', `${remainPct}%`);
           ui.text.textContent = `${Math.ceil(cd.remaining / 1000)}s`;
           ui.el.classList.add('on-cooldown');
         }
@@ -348,8 +389,8 @@ export class HUD {
 
   _drawMinimap(stats) {
     const ctx = this._minimapCtx;
-    const w = 160;
-    const h = 160;
+    const w = 200;
+    const h = 200;
     const worldW = 2000;
     const worldH = 2000;
 
@@ -375,6 +416,18 @@ export class HUD {
       }
     }
 
+    // Draw BR zone circle if active
+    if (this._zoneData) {
+      const zx = (this._zoneData.x / worldW) * w;
+      const zy = (this._zoneData.y / worldH) * h;
+      const zr = (this._zoneData.radius / worldW) * w;
+      ctx.strokeStyle = 'rgba(255, 68, 68, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(zx, zy, zr, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Border
     ctx.strokeStyle = 'rgba(68, 136, 255, 0.3)';
     ctx.lineWidth = 1;
@@ -384,11 +437,27 @@ export class HUD {
     if (stats.playerX !== undefined) {
       const px = (stats.playerX / worldW) * w;
       const py = (stats.playerY / worldH) * h;
+      const angle = stats.playerAngle || 0;
+
+      // FOV cone
+      const fovHalf = Math.PI / 6; // 60-degree cone
+      const coneLen = 20;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(angle);
+      ctx.fillStyle = 'rgba(68, 136, 255, 0.08)';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(-fovHalf) * coneLen, Math.sin(-fovHalf) * coneLen);
+      ctx.arc(0, 0, coneLen, -fovHalf, fovHalf);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
 
       // Direction triangle
       ctx.save();
       ctx.translate(px, py);
-      ctx.rotate(stats.playerAngle || 0);
+      ctx.rotate(angle);
       ctx.fillStyle = '#4488ff';
       ctx.beginPath();
       ctx.moveTo(5, 0);
@@ -421,5 +490,24 @@ export class HUD {
         ctx.fill();
       }
     }
+  }
+
+  updateZone(x, y, radius) {
+    this._zoneData = { x, y, radius };
+  }
+
+  updateAliveCount(count) {
+    this._aliveEl.textContent = `ALIVE: ${count}`;
+  }
+
+  updateFlags(flags, scores) {
+    this._flagData = flags;
+    this._aliveEl.textContent = `RED: ${scores.red} | BLUE: ${scores.blue}`;
+  }
+
+  updateHill(x, y, radius, controlling, scores) {
+    this._hillData = { x, y, radius };
+    const ctrl = controlling ? controlling.toUpperCase() : 'NONE';
+    this._aliveEl.textContent = `RED: ${scores.red} | BLUE: ${scores.blue} | HILL: ${ctrl}`;
   }
 }

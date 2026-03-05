@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
-const MAX_PARTICLES = 600;
+const DEFAULT_MAX_PARTICLES = 600;
 
 export class ParticleSystem {
-  constructor(scene) {
+  constructor(scene, maxParticles = DEFAULT_MAX_PARTICLES) {
     this.scene = scene;
+    this._maxParticles = maxParticles;
 
     // InstancedMesh for all particles (single draw call)
     const geo = new THREE.SphereGeometry(1, 5, 5);
@@ -13,19 +14,19 @@ export class ParticleSystem {
       transparent: true,
       depthWrite: false
     });
-    this._instancedMesh = new THREE.InstancedMesh(geo, mat, MAX_PARTICLES);
+    this._instancedMesh = new THREE.InstancedMesh(geo, mat, maxParticles);
     this._instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._instancedMesh.frustumCulled = false;
 
     // Instance colors
     this._instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
-      new Float32Array(MAX_PARTICLES * 3), 3
+      new Float32Array(maxParticles * 3), 3
     );
     this._instancedMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
 
     // Hide all by default (scale to 0)
     const hideMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-    for (let i = 0; i < MAX_PARTICLES; i++) {
+    for (let i = 0; i < maxParticles; i++) {
       this._instancedMesh.setMatrixAt(i, hideMatrix);
     }
     this._instancedMesh.instanceMatrix.needsUpdate = true;
@@ -33,8 +34,8 @@ export class ParticleSystem {
     scene.add(this._instancedMesh);
 
     // Particle data
-    this._particles = new Array(MAX_PARTICLES);
-    for (let i = 0; i < MAX_PARTICLES; i++) {
+    this._particles = new Array(maxParticles);
+    for (let i = 0; i < maxParticles; i++) {
       this._particles[i] = {
         active: false,
         x: 0, y: 0, z: 0,
@@ -92,7 +93,7 @@ export class ParticleSystem {
   update(dt) {
     let anyActive = false;
 
-    for (let i = 0; i < MAX_PARTICLES; i++) {
+    for (let i = 0; i < this._maxParticles; i++) {
       const p = this._particles[i];
       if (!p.active) continue;
 
@@ -137,24 +138,24 @@ export class ParticleSystem {
 
   _getAvailable() {
     // Round-robin search
-    for (let j = 0; j < MAX_PARTICLES; j++) {
-      const idx = (this._nextIndex + j) % MAX_PARTICLES;
+    for (let j = 0; j < this._maxParticles; j++) {
+      const idx = (this._nextIndex + j) % this._maxParticles;
       if (!this._particles[idx].active) {
         this._particles[idx].index = idx;
-        this._nextIndex = (idx + 1) % MAX_PARTICLES;
+        this._nextIndex = (idx + 1) % this._maxParticles;
         return this._particles[idx];
       }
     }
     // Overwrite oldest
     const idx = this._nextIndex;
     this._particles[idx].index = idx;
-    this._nextIndex = (idx + 1) % MAX_PARTICLES;
+    this._nextIndex = (idx + 1) % this._maxParticles;
     return this._particles[idx];
   }
 
   clear() {
     const hideMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-    for (let i = 0; i < MAX_PARTICLES; i++) {
+    for (let i = 0; i < this._maxParticles; i++) {
       this._particles[i].active = false;
       this._instancedMesh.setMatrixAt(i, hideMatrix);
     }

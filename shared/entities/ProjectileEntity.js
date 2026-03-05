@@ -1,16 +1,20 @@
 import { Entity } from './Entity.js';
 import { GameConfig } from '../config/GameConfig.js';
+import { WeaponConfig } from '../config/WeaponConfig.js';
 
 export class ProjectileEntity extends Entity {
-  constructor(x, y, angle, ownerId) {
+  constructor(x, y, angle, ownerId, weaponType = 'auto_rifle') {
     super(x, y);
-    this.radius = GameConfig.BULLET_RADIUS;
+    this.weaponType = weaponType;
+
+    const wep = WeaponConfig[weaponType] || WeaponConfig['auto_rifle'];
+    this.radius = wep.bulletRadius;
     this.rotation = angle;
-    this.speed = GameConfig.BULLET_SPEED;
-    this.damage = GameConfig.BULLET_DAMAGE;
+    this.speed = wep.bulletSpeed;
+    this.damage = wep.damage;
     this.ownerId = ownerId;
     this.createdAt = Date.now();
-    this.lifetime = GameConfig.BULLET_LIFETIME;
+    this.lifetime = wep.bulletLifetime;
 
     // Set velocity from angle
     this.vx = Math.cos(angle) * this.speed;
@@ -34,7 +38,8 @@ export class ProjectileEntity extends Entity {
   serialize() {
     return {
       ...super.serialize(),
-      ownerId: this.ownerId
+      ownerId: this.ownerId,
+      weaponType: this.weaponType
     };
   }
 }

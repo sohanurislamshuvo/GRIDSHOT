@@ -17,7 +17,7 @@ export class PlayerRepository {
         UPDATE players SET
           xp = ?, level = ?, rating = ?,
           wins = ?, losses = ?, kills = ?, deaths = ?,
-          unlocked_abilities = ?,
+          unlocked_abilities = ?, stats_json = ?,
           updated_at = datetime('now')
         WHERE id = ?
       `),
@@ -33,6 +33,50 @@ export class PlayerRepository {
       getMatchHistory: this.db.prepare(`
         SELECT * FROM match_history WHERE player_id = ?
         ORDER BY played_at DESC LIMIT ?
+      `),
+
+      // Friends
+      sendFriendRequest: this.db.prepare(`
+        INSERT OR IGNORE INTO friends (player_id, friend_id, status) VALUES (?, ?, 'pending')
+      `),
+      acceptFriend: this.db.prepare(`
+        UPDATE friends SET status = 'accepted' WHERE player_id = ? AND friend_id = ? AND status = 'pending'
+      `),
+      removeFriend: this.db.prepare(`
+        DELETE FROM friends WHERE
+          (player_id = ? AND friend_id = ?) OR (player_id = ? AND friend_id = ?)
+      `),
+      getFriends: this.db.prepare(`
+        SELECT f.*, p.username, p.level, p.rating
+        FROM friends f
+        JOIN players p ON (
+          CASE WHEN f.player_id = ? THEN f.friend_id ELSE f.player_id END
+        ) = p.id
+        WHERE (f.player_id = ? OR f.friend_id = ?) AND f.status = 'accepted'
+      `),
+      getPendingRequests: this.db.prepare(`
+        SELECT f.*, p.username, p.level
+        FROM friends f
+        JOIN players p ON f.player_id = p.id
+        WHERE f.friend_id = ? AND f.status = 'pending'
+      `),
+
+      // Achievements
+      getAchievements: this.db.prepare(`
+        SELECT achievement_id, unlocked_at FROM player_achievements WHERE player_id = ?
+      `),
+      unlockAchievement: this.db.prepare(`
+        INSERT OR IGNORE INTO player_achievements (player_id, achievement_id) VALUES (?, ?)
+      `),
+
+      // Cosmetics
+      updateCosmetics: this.db.prepare(`
+        UPDATE players SET equipped_skin = ?, equipped_trail = ?, unlocked_cosmetics = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `),
+      getCosmetics: this.db.prepare(`
+        SELECT equipped_skin, equipped_trail, unlocked_cosmetics FROM players WHERE id = ?
       `)
     };
   }
@@ -61,6 +105,7 @@ export class PlayerRepository {
       stats.kills,
       stats.deaths,
       JSON.stringify(stats.unlockedAbilities || ['dash']),
+      JSON.stringify(stats.detailedStats || {}),
       id
     );
   }
@@ -85,5 +130,50 @@ export class PlayerRepository {
 
   getMatchHistory(playerId, limit = 20) {
     return this.stmts.getMatchHistory.all(playerId, limit);
+  }
+
+  // Friends
+  sendFriendRequest(playerId, friendId) {
+    return this.stmts.sendFriendRequest.run(playerId, friendId);
+  }
+
+  acceptFriend(requesterId, accepterId) {
+    return this.stmts.acceptFriend.run(requesterId, accepterId);
+  }
+
+  removeFriend(playerId, friendId) {
+    return this.stmts.removeFriend.run(playerId, friendId, friendId, playerId);
+  }
+
+  getFriends(playerId) {
+    return this.stmts.getFriends.all(playerId, playerId, playerId);
+  }
+
+  getPendingRequests(playerId) {
+    return this.stmts.getPendingRequests.all(playerId);
+  }
+
+  // Achievements
+  getAchievements(playerId) {
+    return this.stmts.getAchievements.all(playerId);
+  }
+
+  unlockAchievement(playerId, achievementId) {
+    return this.stmts.unlockAchievement.run(playerId, achievementId);
+  }
+
+  // Cosmetics
+  getCosmetics(playerId) {
+    const row = this.stmts.getCosmetics.get(playerId);
+    if (!row) return null;
+    return {
+      equippedSkin: row.equipped_skin || 'default',
+      equippedTrail: row.equipped_trail || 'none',
+      unlockedCosmetics: JSON.parse(row.unlocked_cosmetics || '["default"]')
+    };
+  }
+
+  updateCosmetics(playerId, skin, trail, unlocked) {
+    this.stmts.updateCosmetics.run(skin, trail, JSON.stringify(unlocked), playerId);
   }
 }

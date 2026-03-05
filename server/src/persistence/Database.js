@@ -30,6 +30,10 @@ export class Database {
         kills INTEGER DEFAULT 0,
         deaths INTEGER DEFAULT 0,
         unlocked_abilities TEXT DEFAULT '["dash"]',
+        stats_json TEXT DEFAULT '{}',
+        equipped_skin TEXT DEFAULT 'default',
+        equipped_trail TEXT DEFAULT 'none',
+        unlocked_cosmetics TEXT DEFAULT '["default"]',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -49,10 +53,50 @@ export class Database {
         FOREIGN KEY (player_id) REFERENCES players(id)
       );
 
+      CREATE TABLE IF NOT EXISTS friends (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id TEXT NOT NULL,
+        friend_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (player_id) REFERENCES players(id),
+        FOREIGN KEY (friend_id) REFERENCES players(id),
+        UNIQUE(player_id, friend_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS player_achievements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id TEXT NOT NULL,
+        achievement_id TEXT NOT NULL,
+        unlocked_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (player_id) REFERENCES players(id),
+        UNIQUE(player_id, achievement_id)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_players_rating ON players(rating DESC);
       CREATE INDEX IF NOT EXISTS idx_players_username ON players(username);
       CREATE INDEX IF NOT EXISTS idx_match_history_player ON match_history(player_id);
+      CREATE INDEX IF NOT EXISTS idx_friends_player ON friends(player_id);
+      CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_id);
+      CREATE INDEX IF NOT EXISTS idx_achievements_player ON player_achievements(player_id);
     `);
+
+    // Migrate existing tables - add new columns if missing
+    this._addColumnIfMissing('players', 'stats_json', "TEXT DEFAULT '{}'");
+    this._addColumnIfMissing('players', 'equipped_skin', "TEXT DEFAULT 'default'");
+    this._addColumnIfMissing('players', 'equipped_trail', "TEXT DEFAULT 'none'");
+    this._addColumnIfMissing('players', 'unlocked_cosmetics', "TEXT DEFAULT '[\"default\"]'");
+  }
+
+  _addColumnIfMissing(table, column, definition) {
+    try {
+      const cols = this.db.pragma(`table_info(${table})`);
+      if (!cols.find(c => c.name === column)) {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      }
+    } catch (e) {
+      // Column likely already exists
+    }
   }
 
   close() {
