@@ -22,6 +22,7 @@ import { PickupType, PickupConfig } from 'shadow-arena-shared/entities/PickupEnt
 import { DestructibleType, DestructibleConfig } from 'shadow-arena-shared/entities/DestructibleEntity.js';
 import { TrailConfig } from 'shadow-arena-shared/config/CosmeticConfig.js';
 import { ClientPickup } from './entities/ClientPickup.js';
+import { SpatialHash } from 'shadow-arena-shared/utils/SpatialHash.js';
 
 const State = { MENU: 'MENU', LOBBY: 'LOBBY', CONNECTING: 'CONNECTING', PLAYING: 'PLAYING', SKYDIVING: 'SKYDIVING', GAME_OVER: 'GAME_OVER' };
 
@@ -57,6 +58,7 @@ export class Game {
     this.playerBullets = [];
     this.botBullets = [];
     this.bots = [];
+    this.botSpatialHash = new SpatialHash(100); // Spatial hash for O(1) collision lookups
     this.remotePlayers = new Map();
     this.serverProjectiles = new Map();
     this.clientPickups = new Map();  // id -> ClientPickup
@@ -345,7 +347,13 @@ export class Game {
   }
 
   updateOfflineProjectiles(dt) {
-    // Player bullets vs bots
+    // Rebuild bot spatial hash for O(1) collision lookups
+    this.botSpatialHash.clear();
+    for (const bot of this.bots) {
+      if (bot.alive) this.botSpatialHash.insert(bot);
+    }
+
+    // Player bullets vs bots (using spatial hash)
     for (const bullet of this.playerBullets) {
       if (!bullet.alive) continue;
       bullet.update(dt);
@@ -363,7 +371,9 @@ export class Game {
         continue;
       }
 
-      for (const bot of this.bots) {
+      // Use spatial hash - only check nearby bots
+      const nearbyBots = this.botSpatialHash.getNearby(bullet.x, bullet.y, 50);
+      for (const bot of nearbyBots) {
         if (!bot.alive || !bullet.alive) continue;
         const dx = bullet.x - bot.x;
         const dz = bullet.y - bot.y;
@@ -531,7 +541,38 @@ export class Game {
     }
   }
 
+  // Expand short field names from delta compression
+  _expandDeltaEntity(e) {
+    if (e.i !== undefined) {
+      return {
+        id: e.i,
+        x: e.x,
+        y: e.y,
+        rotation: e.r,
+        health: e.h,
+        alive: e.a,
+        // Preserve any other fields
+        ...e
+      };
+    }
+    return e;
+  }
+
   handleSnapshot(snapshot) {
+    // Expand delta-compressed entities if needed
+    if (snapshot.delta) {
+      snapshot.players = snapshot.players.map(p => this._expandDeltaEntity(p));
+      snapshot.bots = snapshot.bots.map(b => this._expandDeltaEntity(b));
+      // Projectiles use compact format: {i, x, y}
+      snapshot.projectiles = snapshot.projectiles.map(p => ({
+        id: p.i !== undefined ? p.i : p.id,
+        x: p.x,
+        y: p.y,
+        rotation: p.r || p.rotation,
+        ownerId: p.o || p.ownerId
+      }));
+    }
+
     const myState = snapshot.players.find(p => p.id === this.network.playerId);
     if (myState) {
       this.reconcileLocalPlayer(myState);

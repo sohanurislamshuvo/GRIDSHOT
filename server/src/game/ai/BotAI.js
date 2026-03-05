@@ -12,6 +12,11 @@ export class BotAI {
     this.detectionRange = GameConfig.BOT_DETECTION_RANGE;
     this.attackRange = GameConfig.BOT_ATTACK_RANGE;
 
+    // Nearest player cache - reduces lookups by 80%
+    this._cachedTarget = null;
+    this._cacheFrame = 0;
+    this._cacheInterval = 5; // Re-check every 5 frames
+
     // Pick initial waypoint
     this.pickNewWaypoint();
   }
@@ -19,8 +24,13 @@ export class BotAI {
   update(dt, now) {
     if (!this.bot.alive) return;
 
-    // Find nearest player target
-    this.target = this.room.getNearestPlayer(this.bot.x, this.bot.y, this.bot.id);
+    // Find nearest player target (cached for performance)
+    this._cacheFrame++;
+    if (this._cacheFrame >= this._cacheInterval || !this._cachedTarget || !this._cachedTarget.alive) {
+      this._cachedTarget = this.room.getNearestPlayer(this.bot.x, this.bot.y, this.bot.id);
+      this._cacheFrame = 0;
+    }
+    this.target = this._cachedTarget;
     const targetDist = this.target ? distance(this.bot.x, this.bot.y, this.target.x, this.target.y) : Infinity;
 
     // FSM transitions

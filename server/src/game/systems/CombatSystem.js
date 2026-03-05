@@ -2,6 +2,9 @@ import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
 import { MessageTypes } from 'shadow-arena-shared/utils/MessageTypes.js';
 import { distance } from 'shadow-arena-shared/utils/Vector2.js';
 
+// Maximum collision check radius (largest entity radius + projectile radius)
+const MAX_COLLISION_RADIUS = 50;
+
 export class CombatSystem {
   constructor(room) {
     this.room = room;
@@ -9,77 +12,73 @@ export class CombatSystem {
 
   update(now) {
     const projectilesToRemove = [];
+    const spatialHash = this.room.entitySpatialHash;
 
     for (const [projId, proj] of this.room.projectiles.entries()) {
-      // Check against players
-      for (const [playerId, player] of this.room.players.entries()) {
-        if (!player.alive || proj.ownerId === playerId) continue;
-
-        // Team check - don't hit teammates
-        if (this.room.settings.teams) {
-          const owner = this.room.players.get(proj.ownerId) || this.room.bots.get(proj.ownerId);
-          if (owner && owner.team === player.team) continue;
-        }
-
-        const dist = distance(proj.x, proj.y, player.x, player.y);
-        if (dist < proj.radius + player.radius) {
-          const damage = player.takeDamage(proj.damage);
-          projectilesToRemove.push(projId);
-
-          // Notify hit
-          this.room.io.to(this.room.id).emit(MessageTypes.HIT_CONFIRM, {
-            targetId: playerId,
-            damage,
-            health: player.health,
-            attackerId: proj.ownerId
-          });
-
-          if (!player.alive) {
-            this.handleKill(proj.ownerId, playerId, now, proj.weaponType);
-          }
-          break;
-        }
-      }
-
-      // Check against bots
-      for (const [botId, bot] of this.room.bots.entries()) {
-        if (!bot.alive || proj.ownerId === botId) continue;
-
-        const dist = distance(proj.x, proj.y, bot.x, bot.y);
-        if (dist < proj.radius + bot.radius) {
-          bot.takeDamage(proj.damage);
-          projectilesToRemove.push(projId);
-
-          this.room.io.to(this.room.id).emit(MessageTypes.HIT_CONFIRM, {
-            targetId: botId,
-            damage: proj.damage,
-            health: bot.health,
-            attackerId: proj.ownerId
-          });
-
-          if (!bot.alive) {
-            this.handleBotKill(proj.ownerId, botId, now, proj.weaponType);
-          }
-          break;
-        }
-      }
-
-      // Check against destructibles
       if (projectilesToRemove.includes(projId)) continue;
-      for (const [destId, dest] of this.room.destructibles.entries()) {
-        if (!dest.alive) continue;
-        const dist = distance(proj.x, proj.y, dest.x, dest.y);
-        if (dist < proj.radius + dest.radius) {
-          dest.takeDamage(proj.damage);
+
+      // Use spatial hash to get only nearby entities - O(1) average vs O(n) full scan
+      const nearby = spatialHash.getNearby(proj.x, proj.y, MAX_COLLISION_RADIUS);
+
+      for (const entity of nearby) {
+        if (!entity.alive || entity.id === proj.ownerId) continue;
+
+        // Check collision distance
+        const dist = distance(proj.x, proj.y, entity.x, entity.y);
+        if (dist >= proj.radius + entity.radius) continue;
+
+        // Determine entity type and handle collision
+        const isPlayer = this.room.players.has(entity.id);
+        const isBot = this.room.bots.has(entity.id);
+        const isDestructible = this.room.destructibles.has(entity.id);
+
+        if (isPlayer) {
+          // Team check - don't hit teammates
+          if (this.room.settings.teams) {
+            const owner = this.room.players.get(proj.ownerId) || this.room.bots.get(proj.ownerId);
+            if (owner && owner.team === entity.team) continue;
+          }
+
+          const damage = entity.takeDamage(proj.damage);
           projectilesToRemove.push(projId);
 
-          if (!dest.alive) {
-            dest._respawnAt = now + 30000; // 30s respawn
+          this.room.io.to(this.room.id).emit(MessageTypes.HIT_CONFIRM, {
+            targetId: entity.id,
+            damage,
+            health: entity.health,
+            attackerId: proj.ownerId
+          });
+
+          if (!entity.alive) {
+            this.handleKill(proj.ownerId, entity.id, now, proj.weaponType);
+          }
+          break;
+        } else if (isBot) {
+          entity.takeDamage(proj.damage);
+          projectilesToRemove.push(projId);
+
+          this.room.io.to(this.room.id).emit(MessageTypes.HIT_CONFIRM, {
+            targetId: entity.id,
+            damage: proj.damage,
+            health: entity.health,
+            attackerId: proj.ownerId
+          });
+
+          if (!entity.alive) {
+            this.handleBotKill(proj.ownerId, entity.id, now, proj.weaponType);
+          }
+          break;
+        } else if (isDestructible) {
+          entity.takeDamage(proj.damage);
+          projectilesToRemove.push(projId);
+
+          if (!entity.alive) {
+            entity._respawnAt = now + 30000; // 30s respawn
             this.room.io.to(this.room.id).emit(MessageTypes.DESTRUCTIBLE_DESTROYED, {
-              id: destId,
-              x: dest.x,
-              y: dest.y,
-              type: dest.type
+              id: entity.id,
+              x: entity.x,
+              y: entity.y,
+              type: entity.type
             });
           }
           break;
@@ -87,8 +86,9 @@ export class CombatSystem {
       }
     }
 
-    // Remove hit projectiles
+    // Remove hit projectiles and return to pool
     for (const id of projectilesToRemove) {
+      this.room.projectilePool.release(id);
       this.room.projectiles.delete(id);
     }
   }

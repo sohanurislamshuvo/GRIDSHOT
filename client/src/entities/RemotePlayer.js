@@ -4,6 +4,18 @@ import { CharacterFactory } from './CharacterFactory.js';
 
 const INTERPOLATION_DELAY = 100;
 
+// Shared team materials - avoids creating duplicate materials per player
+const TEAM_MATERIALS = new Map();
+function getTeamMaterial(team) {
+  if (!team) return null;
+  if (TEAM_MATERIALS.has(team)) return TEAM_MATERIALS.get(team);
+  const teamColors = { red: 0xff4444, blue: 0x4444ff, orange: 0xffaa00 };
+  const tintColor = teamColors[team] || 0xffffff;
+  const mat = new THREE.MeshStandardMaterial({ color: tintColor, roughness: 0.6, metalness: 0.3 });
+  TEAM_MATERIALS.set(team, mat);
+  return mat;
+}
+
 export class RemotePlayer {
   constructor(game, id, x, y, team) {
     this.game = game;
@@ -19,18 +31,18 @@ export class RemotePlayer {
     this.maxHealth = GameConfig.PLAYER_MAX_HEALTH;
     this.alive = true;
 
-    // Snapshot buffer
-    this._snapshots = [];
+    // Ring buffer for snapshots - O(1) vs O(n) for shift()
+    this._snapshots = new Array(10);
+    this._snapshotHead = 0;
+    this._snapshotCount = 0;
 
     // 3D model
     this.group = CharacterFactory.createPlayer(game.assets);
     this.group.position.set(x, 0, y);
 
-    // Team color tint
+    // Team color tint - uses shared materials
     if (team) {
-      const teamColors = { red: 0xff4444, blue: 0x4444ff, orange: 0xffaa00 };
-      const tintColor = teamColors[team] || 0xffffff;
-      const tintMat = new THREE.MeshStandardMaterial({ color: tintColor, roughness: 0.6, metalness: 0.3 });
+      const tintMat = getTeamMaterial(team);
       this.group.traverse(child => {
         if (child.isMesh) child.material = tintMat;
       });
@@ -50,15 +62,17 @@ export class RemotePlayer {
   }
 
   addSnapshot(state) {
-    this._snapshots.push({
+    // Ring buffer insert - O(1) instead of shift() O(n)
+    this._snapshots[this._snapshotHead] = {
       x: state.x,
       y: state.y,
       rotation: state.rotation,
       health: state.health,
       alive: state.alive,
       timestamp: Date.now()
-    });
-    if (this._snapshots.length > 10) this._snapshots.shift();
+    };
+    this._snapshotHead = (this._snapshotHead + 1) % 10;
+    if (this._snapshotCount < 10) this._snapshotCount++;
 
     this.health = state.health;
     this.maxHealth = state.maxHealth;
@@ -67,10 +81,21 @@ export class RemotePlayer {
     this.shadow.visible = state.alive;
   }
 
+  // Get snapshots in chronological order from ring buffer
+  _getOrderedSnapshots() {
+    if (this._snapshotCount === 0) return [];
+    const result = [];
+    const start = (this._snapshotHead - this._snapshotCount + 10) % 10;
+    for (let i = 0; i < this._snapshotCount; i++) {
+      result.push(this._snapshots[(start + i) % 10]);
+    }
+    return result;
+  }
+
   interpolate() {
-    if (this._snapshots.length < 2) {
-      if (this._snapshots.length === 1) {
-        const s = this._snapshots[0];
+    if (this._snapshotCount < 2) {
+      if (this._snapshotCount === 1) {
+        const s = this._snapshots[(this._snapshotHead - 1 + 10) % 10];
         this.x = s.x;
         this.y = s.y;
         this.rotation = s.rotation;
@@ -79,15 +104,16 @@ export class RemotePlayer {
       return;
     }
 
+    const snapshots = this._getOrderedSnapshots();
     const renderTime = Date.now() - INTERPOLATION_DELAY;
     let i = 0;
-    while (i < this._snapshots.length - 1 && this._snapshots[i + 1].timestamp <= renderTime) {
+    while (i < snapshots.length - 1 && snapshots[i + 1].timestamp <= renderTime) {
       i++;
     }
 
-    if (i < this._snapshots.length - 1) {
-      const a = this._snapshots[i];
-      const b = this._snapshots[i + 1];
+    if (i < snapshots.length - 1) {
+      const a = snapshots[i];
+      const b = snapshots[i + 1];
       const range = b.timestamp - a.timestamp;
       const t = range > 0 ? Math.max(0, Math.min(1, (renderTime - a.timestamp) / range)) : 1;
 
@@ -95,7 +121,7 @@ export class RemotePlayer {
       this.y = a.y + (b.y - a.y) * t;
       this.rotation = this._lerpAngle(a.rotation, b.rotation, t);
     } else {
-      const last = this._snapshots[this._snapshots.length - 1];
+      const last = snapshots[snapshots.length - 1];
       this.x = last.x;
       this.y = last.y;
       this.rotation = last.rotation;

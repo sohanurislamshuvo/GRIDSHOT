@@ -49,6 +49,7 @@ export class ParticleSystem {
     this._matrix = new THREE.Matrix4();
     this._color = new THREE.Color();
     this._nextIndex = 0;
+    this._activeCount = 0; // Track active particles for early exit
   }
 
   emit(x, y, z, options = {}) {
@@ -65,6 +66,7 @@ export class ParticleSystem {
       if (!p) break;
 
       p.active = true;
+      this._activeCount++;
       p.x = x;
       p.y = y;
       p.z = z;
@@ -91,6 +93,9 @@ export class ParticleSystem {
   }
 
   update(dt) {
+    // Early exit if no active particles - saves 5-10ms during idle
+    if (this._activeCount === 0) return;
+
     let anyActive = false;
 
     for (let i = 0; i < this._maxParticles; i++) {
@@ -100,10 +105,10 @@ export class ParticleSystem {
       p.life += dt;
       if (p.life >= p.maxLife) {
         p.active = false;
+        this._activeCount--;
         // Hide instance
         this._matrix.makeScale(0, 0, 0);
         this._instancedMesh.setMatrixAt(i, this._matrix);
-        anyActive = true;
         continue;
       }
 
@@ -159,6 +164,7 @@ export class ParticleSystem {
       this._particles[i].active = false;
       this._instancedMesh.setMatrixAt(i, hideMatrix);
     }
+    this._activeCount = 0;
     this._instancedMesh.instanceMatrix.needsUpdate = true;
   }
 

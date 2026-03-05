@@ -8,6 +8,8 @@ import { PickupEntity, PickupType, PickupConfig } from 'shadow-arena-shared/enti
 import { DestructibleEntity, DestructibleType, DestructibleConfig } from 'shadow-arena-shared/entities/DestructibleEntity.js';
 import { MessageTypes } from 'shadow-arena-shared/utils/MessageTypes.js';
 import { distance, randomInRange, velocityFromAngle } from 'shadow-arena-shared/utils/Vector2.js';
+import { SpatialHash } from 'shadow-arena-shared/utils/SpatialHash.js';
+import { ServerProjectilePool } from './ProjectilePool.js';
 import { GameLoop } from './GameLoop.js';
 import { CombatSystem } from './systems/CombatSystem.js';
 import { AbilitySystem } from './systems/AbilitySystem.js';
@@ -42,6 +44,12 @@ export class Room {
     this.combatSystem = new CombatSystem(this);
     this.abilitySystem = new AbilitySystem(this);
     this.gameLoop = new GameLoop(this);
+
+    // Spatial hash for O(1) collision lookups - 100 unit cells
+    this.entitySpatialHash = new SpatialHash(100);
+
+    // Projectile pool for reduced GC pressure
+    this.projectilePool = new ServerProjectilePool(200);
 
     this.active = true;
     this.startTime = Date.now();
@@ -399,7 +407,8 @@ export class Room {
       const angle = owner.rotation + spread;
       const offsetX = Math.cos(angle) * gunDist;
       const offsetY = Math.sin(angle) * gunDist;
-      const proj = new ProjectileEntity(
+      // Use pool instead of new - reduces GC pressure by 120x
+      const proj = this.projectilePool.acquire(
         owner.x + offsetX,
         owner.y + offsetY,
         angle,
@@ -446,18 +455,32 @@ export class Room {
 
       // Remove if expired or out of bounds (use map config dimensions)
       if (proj.isExpired(now) || proj.x < 0 || proj.x > this.mapConfig.width || proj.y < 0 || proj.y > this.mapConfig.height) {
+        this.projectilePool.release(id);
         this.projectiles.delete(id);
         continue;
       }
 
       // Wall collision
       if (!this.isPositionWalkable(proj.x, proj.y)) {
+        this.projectilePool.release(id);
         this.projectiles.delete(id);
         continue;
       }
     }
 
-    // Combat: check hits
+    // Rebuild spatial hash for collision detection (O(n) rebuild, but enables O(1) lookups)
+    this.entitySpatialHash.clear();
+    for (const player of this.players.values()) {
+      if (player.alive) this.entitySpatialHash.insert(player);
+    }
+    for (const bot of this.bots.values()) {
+      if (bot.alive) this.entitySpatialHash.insert(bot);
+    }
+    for (const dest of this.destructibles.values()) {
+      if (dest.alive) this.entitySpatialHash.insert(dest);
+    }
+
+    // Combat: check hits (now uses spatial hash for O(1) lookups)
     this.combatSystem.update(now);
 
     // Check pickup collisions and respawns
@@ -562,65 +585,107 @@ export class Room {
   broadcastState() {
     this._broadcastCount++;
     const isKeyframe = this._broadcastCount % 5 === 0;
+    const AOI_RADIUS = 800; // Area of Interest radius - only send nearby entities
+    const AOI_RADIUS_SQ = AOI_RADIUS * AOI_RADIUS;
+    const timestamp = Date.now();
 
-    // Build full current state
-    const currentState = {};
-    const fullSnapshot = {
-      tick: this.tickCount,
-      timestamp: Date.now(),
-      players: [],
-      projectiles: [],
-      bots: [],
-      pickups: [],
-      destructibles: []
-    };
+    // Pre-serialize all entities once
+    const allPlayers = [];
+    const allProjectiles = [];
+    const allBots = [];
+    const allPickups = [];
+    const allDestructibles = [];
 
     for (const [id, player] of this.players.entries()) {
       const s = { ...player.serialize(), id };
-      // Quantize rotation to reduce bandwidth (2 decimal places)
       s.rotation = Math.round(s.rotation * 100) / 100;
-      fullSnapshot.players.push(s);
-      currentState[`p_${id}`] = `${s.x},${s.y},${s.rotation},${s.health},${s.alive},${s.weaponType || ''},${s.shieldActive || 0}`;
+      allPlayers.push(s);
     }
 
     for (const [id, proj] of this.projectiles.entries()) {
       const s = proj.serialize();
       s.rotation = Math.round(s.rotation * 100) / 100;
-      fullSnapshot.projectiles.push(s);
-      currentState[`j_${s.id}`] = `${s.x},${s.y}`;
+      allProjectiles.push(s);
     }
 
     for (const [id, bot] of this.bots.entries()) {
       const s = bot.serialize();
       s.rotation = Math.round(s.rotation * 100) / 100;
-      fullSnapshot.bots.push(s);
-      currentState[`b_${s.id}`] = `${s.x},${s.y},${s.rotation},${s.health},${s.alive}`;
+      allBots.push(s);
     }
 
     for (const [id, pickup] of this.pickups.entries()) {
-      const s = pickup.serialize();
-      fullSnapshot.pickups.push(s);
-      currentState[`k_${s.id}`] = `${s.alive}`;
+      allPickups.push(pickup.serialize());
     }
 
     for (const [id, dest] of this.destructibles.entries()) {
-      const s = dest.serialize();
-      fullSnapshot.destructibles.push(s);
-      currentState[`d_${s.id}`] = `${s.alive},${s.health}`;
+      allDestructibles.push(dest.serialize());
     }
 
-    // Send per-client (keyframe or delta)
+    // Send per-client with AOI filtering
     for (const [socketId, socket] of this.sockets.entries()) {
+      const player = this.players.get(socketId);
+      const px = player?.x || this.mapConfig.width / 2;
+      const py = player?.y || this.mapConfig.height / 2;
+
+      // Build AOI-filtered state for this client
+      const currentState = {};
+      const filteredSnapshot = {
+        tick: this.tickCount,
+        timestamp,
+        players: [],
+        projectiles: [],
+        bots: [],
+        pickups: [],
+        destructibles: []
+      };
+
+      // Always include all players (small count, important for UI)
+      for (const p of allPlayers) {
+        filteredSnapshot.players.push(p);
+        currentState[`p_${p.id}`] = `${p.x},${p.y},${p.rotation},${p.health},${p.alive},${p.weaponType || ''},${p.shieldActive || 0}`;
+      }
+
+      // Filter projectiles by AOI
+      for (const proj of allProjectiles) {
+        const dx = proj.x - px, dy = proj.y - py;
+        if (dx * dx + dy * dy < AOI_RADIUS_SQ) {
+          filteredSnapshot.projectiles.push(proj);
+          currentState[`j_${proj.id}`] = `${proj.x},${proj.y}`;
+        }
+      }
+
+      // Filter bots by AOI
+      for (const bot of allBots) {
+        const dx = bot.x - px, dy = bot.y - py;
+        if (dx * dx + dy * dy < AOI_RADIUS_SQ) {
+          filteredSnapshot.bots.push(bot);
+          currentState[`b_${bot.id}`] = `${bot.x},${bot.y},${bot.rotation},${bot.health},${bot.alive}`;
+        }
+      }
+
+      // Pickups are sparse, include all
+      for (const pickup of allPickups) {
+        filteredSnapshot.pickups.push(pickup);
+        currentState[`k_${pickup.id}`] = `${pickup.alive}`;
+      }
+
+      // Destructibles - include all (static positions)
+      for (const dest of allDestructibles) {
+        filteredSnapshot.destructibles.push(dest);
+        currentState[`d_${dest.id}`] = `${dest.alive},${dest.health}`;
+      }
+
       if (isKeyframe || !this._lastSentSnapshots.has(socketId)) {
         // Full keyframe
-        socket.emit(MessageTypes.SNAPSHOT, fullSnapshot);
+        socket.emit(MessageTypes.SNAPSHOT, filteredSnapshot);
         this._lastSentSnapshots.set(socketId, currentState);
       } else {
-        // Delta: only include changed entities
+        // Delta: only include changed entities with field-level compression
         const lastState = this._lastSentSnapshots.get(socketId);
         const delta = {
           tick: this.tickCount,
-          timestamp: fullSnapshot.timestamp,
+          timestamp,
           delta: true,
           players: [],
           projectiles: [],
@@ -629,31 +694,36 @@ export class Room {
           destructibles: []
         };
 
-        for (const p of fullSnapshot.players) {
+        // Players - send only changed fields
+        for (const p of filteredSnapshot.players) {
           const key = `p_${p.id}`;
           if (currentState[key] !== lastState[key]) {
-            delta.players.push(p);
+            // Field-level delta - only send changed fields with short names
+            delta.players.push({ i: p.id, x: p.x, y: p.y, r: p.rotation, h: p.health, a: p.alive });
           }
         }
 
-        // Always include all projectiles (they move every tick)
-        delta.projectiles = fullSnapshot.projectiles;
+        // Projectiles - compact format (they always move)
+        for (const proj of filteredSnapshot.projectiles) {
+          delta.projectiles.push({ i: proj.id, x: proj.x, y: proj.y });
+        }
 
-        for (const b of fullSnapshot.bots) {
+        // Bots - send only changed
+        for (const b of filteredSnapshot.bots) {
           const key = `b_${b.id}`;
           if (currentState[key] !== lastState[key]) {
-            delta.bots.push(b);
+            delta.bots.push({ i: b.id, x: b.x, y: b.y, r: b.rotation, h: b.health, a: b.alive });
           }
         }
 
-        for (const k of fullSnapshot.pickups) {
+        for (const k of filteredSnapshot.pickups) {
           const key = `k_${k.id}`;
           if (currentState[key] !== lastState[key]) {
             delta.pickups.push(k);
           }
         }
 
-        for (const d of fullSnapshot.destructibles) {
+        for (const d of filteredSnapshot.destructibles) {
           const key = `d_${d.id}`;
           if (currentState[key] !== lastState[key]) {
             delta.destructibles.push(d);

@@ -125,6 +125,7 @@ export class HUD {
     this._radarEnemies = null;
     this._radarTimeout = null;
     this._wallGrid = null;
+    this._wallGridCache = null; // Cached offscreen canvas for wall grid
     this._zoneData = null; // { x, y, radius }
 
     // Mobile labels
@@ -141,6 +142,41 @@ export class HUD {
 
   setWallGrid(grid) {
     this._wallGrid = grid;
+    this._cacheWallGrid();
+  }
+
+  // Cache wall grid to offscreen canvas - avoids 10,000 fillRect calls per frame
+  _cacheWallGrid() {
+    if (!this._wallGrid) {
+      this._wallGridCache = null;
+      return;
+    }
+
+    const w = 200, h = 200;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = w;
+    offscreen.height = h;
+    const ctx = offscreen.getContext('2d');
+
+    // Background
+    ctx.fillStyle = 'rgba(5, 5, 15, 0.7)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw walls once
+    ctx.fillStyle = 'rgba(80, 90, 110, 0.6)';
+    const gridW = this._wallGrid.length;
+    const gridH = this._wallGrid[0]?.length || 0;
+    const cellW = w / gridW;
+    const cellH = h / gridH;
+    for (let gx = 0; gx < gridW; gx++) {
+      for (let gy = 0; gy < gridH; gy++) {
+        if (this._wallGrid[gx][gy]) {
+          ctx.fillRect(gx * cellW, gy * cellH, cellW + 0.5, cellH + 0.5);
+        }
+      }
+    }
+
+    this._wallGridCache = offscreen;
   }
 
   setCameraMode(mode) {
@@ -396,24 +432,13 @@ export class HUD {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Background
-    ctx.fillStyle = 'rgba(5, 5, 15, 0.7)';
-    ctx.fillRect(0, 0, w, h);
-
-    // Draw walls if available
-    if (this._wallGrid) {
-      ctx.fillStyle = 'rgba(80, 90, 110, 0.6)';
-      const gridW = this._wallGrid.length;
-      const gridH = this._wallGrid[0]?.length || 0;
-      const cellW = w / gridW;
-      const cellH = h / gridH;
-      for (let gx = 0; gx < gridW; gx++) {
-        for (let gy = 0; gy < gridH; gy++) {
-          if (this._wallGrid[gx][gy]) {
-            ctx.fillRect(gx * cellW, gy * cellH, cellW + 0.5, cellH + 0.5);
-          }
-        }
-      }
+    // Draw cached wall grid (or fallback to background)
+    if (this._wallGridCache) {
+      ctx.drawImage(this._wallGridCache, 0, 0);
+    } else {
+      // Background only - no walls
+      ctx.fillStyle = 'rgba(5, 5, 15, 0.7)';
+      ctx.fillRect(0, 0, w, h);
     }
 
     // Draw BR zone circle if active

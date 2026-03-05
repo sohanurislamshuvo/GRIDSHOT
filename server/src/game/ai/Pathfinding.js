@@ -1,29 +1,52 @@
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
 
-class PriorityQueue {
+// Binary Heap implementation - O(log n) enqueue/dequeue vs O(n) for linear queue
+class BinaryHeap {
   constructor() {
-    this.items = [];
+    this.nodes = [];
   }
 
   enqueue(item, priority) {
-    const entry = { item, priority };
-    let added = false;
-    for (let i = 0; i < this.items.length; i++) {
-      if (priority < this.items[i].priority) {
-        this.items.splice(i, 0, entry);
-        added = true;
-        break;
-      }
-    }
-    if (!added) this.items.push(entry);
+    this.nodes.push({ item, priority });
+    this._bubbleUp(this.nodes.length - 1);
   }
 
   dequeue() {
-    return this.items.shift()?.item;
+    if (this.nodes.length === 0) return undefined;
+    const min = this.nodes[0].item;
+    const last = this.nodes.pop();
+    if (this.nodes.length > 0) {
+      this.nodes[0] = last;
+      this._sinkDown(0);
+    }
+    return min;
   }
 
   isEmpty() {
-    return this.items.length === 0;
+    return this.nodes.length === 0;
+  }
+
+  _bubbleUp(idx) {
+    while (idx > 0) {
+      const parent = Math.floor((idx - 1) / 2);
+      if (this.nodes[idx].priority >= this.nodes[parent].priority) break;
+      [this.nodes[idx], this.nodes[parent]] = [this.nodes[parent], this.nodes[idx]];
+      idx = parent;
+    }
+  }
+
+  _sinkDown(idx) {
+    const length = this.nodes.length;
+    while (true) {
+      const left = 2 * idx + 1;
+      const right = 2 * idx + 2;
+      let smallest = idx;
+      if (left < length && this.nodes[left].priority < this.nodes[smallest].priority) smallest = left;
+      if (right < length && this.nodes[right].priority < this.nodes[smallest].priority) smallest = right;
+      if (smallest === idx) break;
+      [this.nodes[idx], this.nodes[smallest]] = [this.nodes[smallest], this.nodes[idx]];
+      idx = smallest;
+    }
   }
 }
 
@@ -44,7 +67,7 @@ export class Pathfinding {
       return null;
     }
 
-    const openSet = new PriorityQueue();
+    const openSet = new BinaryHeap();
     const closedSet = new Set();
     const gScore = new Map();
     const cameFrom = new Map();

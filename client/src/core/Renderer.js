@@ -122,6 +122,11 @@ export class Renderer {
     // Target FOV for smooth transitions
     this._targetFov = 45;
 
+    // Adaptive quality - track frame times to dynamically adjust effects
+    this._frameTimeSamples = [];
+    this._adaptiveEnabled = true;
+    this._gtaoDisabledByAdaptive = false;
+
     this._resizeHandler = () => this._onResize();
     window.addEventListener('resize', this._resizeHandler);
   }
@@ -335,11 +340,33 @@ export class Renderer {
   }
 
   render(dt = 0) {
+    const start = performance.now();
+
     if (this._colorGradePass) {
       this._colorGradePass.uniforms.uTime.value += dt;
     }
+
+    // Adaptive quality: disable expensive passes if frame time too high
+    if (this._adaptiveEnabled && this._gtaoPass && this._frameTimeSamples.length >= 10) {
+      const avgFrameTime = this._frameTimeSamples.reduce((a, b) => a + b, 0) / this._frameTimeSamples.length;
+      if (avgFrameTime > 20 && !this._gtaoDisabledByAdaptive) {
+        // Disable GTAO if avg frame time > 20ms (< 50 FPS)
+        this._gtaoPass.enabled = false;
+        this._gtaoDisabledByAdaptive = true;
+      } else if (avgFrameTime < 14 && this._gtaoDisabledByAdaptive) {
+        // Re-enable if avg frame time < 14ms (> 70 FPS)
+        this._gtaoPass.enabled = true;
+        this._gtaoDisabledByAdaptive = false;
+      }
+    }
+
     this.composer.render();
     this.css2dRenderer.render(this.scene, this.camera);
+
+    // Track frame time for adaptive quality
+    const frameTime = performance.now() - start;
+    this._frameTimeSamples.push(frameTime);
+    if (this._frameTimeSamples.length > 30) this._frameTimeSamples.shift();
   }
 
   flashDamage() {
