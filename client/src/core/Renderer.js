@@ -4,6 +4,40 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+// Cinematic color grading + vignette + film grain shader
+const ColorGradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uVignette: { value: 0.35 },
+    uGrain: { value: 0.015 }
+  },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform float uVignette;
+    uniform float uGrain;
+    varying vec2 vUv;
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      // Vignette
+      float dist = length(vUv - 0.5) * 1.4;
+      color.rgb *= 1.0 - uVignette * dist * dist;
+      // Film grain
+      float noise = fract(sin(dot(vUv + uTime * 0.01, vec2(12.9898, 78.233))) * 43758.5453);
+      color.rgb += (noise - 0.5) * uGrain;
+      // Warm highlight / cool shadow lift
+      color.r += 0.01;
+      color.b += color.r < 0.3 ? 0.015 : -0.005;
+      gl_FragColor = color;
+    }
+  `
+};
 
 const VIEW_MODES = ['tpp', 'shoulder', 'fpp'];
 const FOV = { tpp: 45, shoulder: 55, fpp: 70 };
@@ -13,9 +47,8 @@ export class Renderer {
     this.container = container;
     this.cameraMode = 'tpp';
 
-    // Three.js scene
+    // Three.js scene (no background — sky dome added by WorldBuilder)
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a2a3a);
 
     // Perspective camera
     const aspect = window.innerWidth / window.innerHeight;
@@ -34,10 +67,18 @@ export class Renderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
-    // Post-processing
+    // Post-processing pipeline: Render → GTAO → Bloom → SMAA → ColorGrade → Output
     this.composer = new EffectComposer(this.renderer);
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
+
+    // GTAO (ambient occlusion — contact shadows)
+    const gtaoPass = new GTAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight);
+    gtaoPass.output = GTAOPass.OUTPUT.Default;
+    gtaoPass.updateGtaoMaterial({ radius: 0.4, distanceExponent: 2, thickness: 5, scale: 1.0 });
+    gtaoPass.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 4, samples: 16 });
+    this.composer.addPass(gtaoPass);
+    this._gtaoPass = gtaoPass;
 
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
@@ -52,6 +93,14 @@ export class Renderer {
     );
     this.composer.addPass(smaaPass);
     this._smaaPass = smaaPass;
+
+    // Color grading (vignette + grain + tint)
+    const colorGradePass = new ShaderPass(ColorGradeShader);
+    this.composer.addPass(colorGradePass);
+    this._colorGradePass = colorGradePass;
+
+    const outputPass = new OutputPass();
+    this.composer.addPass(outputPass);
 
     // CSS2D renderer for health bars / labels
     this.css2dRenderer = new CSS2DRenderer();
@@ -175,7 +224,10 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
-  render() {
+  render(dt = 0) {
+    if (this._colorGradePass) {
+      this._colorGradePass.uniforms.uTime.value += dt;
+    }
     this.composer.render();
     this.css2dRenderer.render(this.scene, this.camera);
   }
@@ -197,6 +249,7 @@ export class Renderer {
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
     this._bloomPass.resolution.set(w, h);
+    if (this._gtaoPass) this._gtaoPass.setSize(w, h);
     this.css2dRenderer.setSize(w, h);
   }
 

@@ -12,13 +12,82 @@ export class WorldBuilder {
     this.wallGrid = wallData.grid;
     this.treePositions = []; // exported for collision
 
+    this._buildSky();
     this._buildGround();
     this._buildWalls(wallData.wallPositions);
     this._buildProps(wallData.wallPositions);
     this._buildTrees(wallData.wallPositions);
     this._buildBushes(wallData.wallPositions);
     this._buildRocks(wallData.wallPositions);
+    this._buildWater();
     this._buildLighting();
+  }
+
+  _buildSky() {
+    const skyGeo = new THREE.SphereGeometry(3000, 32, 15);
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        uTime: { value: 0 }
+      },
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vWorldPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vWorldPos;
+
+        // Simple hash noise
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        void main() {
+          float height = normalize(vWorldPos).y;
+
+          // Vertical gradient: dark navy bottom → blue-gray → lighter zenith
+          vec3 bottomColor = vec3(0.04, 0.06, 0.10);
+          vec3 midColor = vec3(0.10, 0.15, 0.23);
+          vec3 zenithColor = vec3(0.15, 0.22, 0.35);
+
+          float t = smoothstep(-0.1, 0.4, height);
+          float t2 = smoothstep(0.3, 0.9, height);
+          vec3 sky = mix(bottomColor, midColor, t);
+          sky = mix(sky, zenithColor, t2);
+
+          // Cloud wisps (upper hemisphere only)
+          if (height > 0.05) {
+            vec2 cloudUV = vWorldPos.xz * 0.001 + uTime * 0.003;
+            float cloud = noise(cloudUV * 3.0) * 0.5 + noise(cloudUV * 7.0) * 0.25 + noise(cloudUV * 13.0) * 0.125;
+            cloud = smoothstep(0.35, 0.7, cloud);
+            float cloudFade = smoothstep(0.05, 0.3, height) * (1.0 - smoothstep(0.7, 1.0, height));
+            sky = mix(sky, vec3(0.2, 0.25, 0.35), cloud * cloudFade * 0.4);
+          }
+
+          gl_FragColor = vec4(sky, 1.0);
+        }
+      `
+    });
+    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    skyMesh.position.set(GameConfig.WORLD_WIDTH / 2, 0, GameConfig.WORLD_HEIGHT / 2);
+    this.scene.add(skyMesh);
+    this.objects.push(skyMesh);
+    this._skyMaterial = skyMat;
   }
 
   _buildGround() {
@@ -31,28 +100,78 @@ export class WorldBuilder {
     this.scene.add(ground);
     this.objects.push(ground);
 
-    // World boundary edges (thin glowing lines)
-    const edgeMat = new THREE.MeshStandardMaterial({
-      color: 0x334466,
-      emissive: 0x223355,
-      emissiveIntensity: 1.0,
-      roughness: 0.3
-    });
     const W = GameConfig.WORLD_WIDTH;
     const H = GameConfig.WORLD_HEIGHT;
-    const edgeGeo = new THREE.BoxGeometry(W, 6, 4);
-    const edgeGeo2 = new THREE.BoxGeometry(4, 6, H);
+
+    // ─── TERRAIN ZONE OVERLAYS ──────────────────────────────────
+    // Grass overlay (north / day half)
+    const grassMat = this.assets.getMaterial('groundGrass');
+    if (grassMat) {
+      const grassGeo = new THREE.PlaneGeometry(W, H / 2);
+      const grassOverlay = new THREE.Mesh(grassGeo, grassMat);
+      grassOverlay.rotation.x = -Math.PI / 2;
+      grassOverlay.position.set(W / 2, 0.12, H / 4);
+      grassOverlay.receiveShadow = true;
+      this.scene.add(grassOverlay);
+      this.objects.push(grassOverlay);
+    }
+
+    // Dirt path strips (center cross)
+    const dirtMat = this.assets.getMaterial('groundDirt');
+    if (dirtMat) {
+      // Horizontal path
+      const dirtHGeo = new THREE.PlaneGeometry(W * 0.6, 40);
+      const dirtH = new THREE.Mesh(dirtHGeo, dirtMat);
+      dirtH.rotation.x = -Math.PI / 2;
+      dirtH.position.set(W / 2, 0.08, H / 2);
+      this.scene.add(dirtH);
+      this.objects.push(dirtH);
+
+      // Vertical path
+      const dirtVGeo = new THREE.PlaneGeometry(40, H * 0.6);
+      const dirtV = new THREE.Mesh(dirtVGeo, dirtMat);
+      dirtV.rotation.x = -Math.PI / 2;
+      dirtV.position.set(W / 2, 0.08, H / 2);
+      this.scene.add(dirtV);
+      this.objects.push(dirtV);
+    }
+
+    // ─── BOUNDARY WALLS (concrete barriers) ─────────────────────
+    const edgeMat = new THREE.MeshStandardMaterial({
+      color: 0x3a3a44, roughness: 0.8, metalness: 0.15
+    });
+    const edgeEmissiveMat = new THREE.MeshStandardMaterial({
+      color: 0x334466, emissive: 0x223355, emissiveIntensity: 0.6, roughness: 0.3
+    });
+    const edgeGeo = new THREE.BoxGeometry(W + 8, 30, 6);
+    const edgeGeo2 = new THREE.BoxGeometry(6, 30, H + 8);
 
     const edges = [
-      { geo: edgeGeo, pos: [W / 2, 3, 0] },
-      { geo: edgeGeo, pos: [W / 2, 3, H] },
-      { geo: edgeGeo2, pos: [0, 3, H / 2] },
-      { geo: edgeGeo2, pos: [W, 3, H / 2] },
+      { geo: edgeGeo, pos: [W / 2, 15, -3] },
+      { geo: edgeGeo, pos: [W / 2, 15, H + 3] },
+      { geo: edgeGeo2, pos: [-3, 15, H / 2] },
+      { geo: edgeGeo2, pos: [W + 3, 15, H / 2] },
     ];
     for (const e of edges) {
       const mesh = new THREE.Mesh(e.geo, edgeMat);
       mesh.position.set(...e.pos);
       mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      this.objects.push(mesh);
+    }
+    // Emissive strip on top
+    const stripGeo = new THREE.BoxGeometry(W + 8, 2, 3);
+    const stripGeo2 = new THREE.BoxGeometry(3, 2, H + 8);
+    const strips = [
+      { geo: stripGeo, pos: [W / 2, 31, -3] },
+      { geo: stripGeo, pos: [W / 2, 31, H + 3] },
+      { geo: stripGeo2, pos: [-3, 31, H / 2] },
+      { geo: stripGeo2, pos: [W + 3, 31, H / 2] },
+    ];
+    for (const s of strips) {
+      const mesh = new THREE.Mesh(s.geo, edgeEmissiveMat);
+      mesh.position.set(...s.pos);
       this.scene.add(mesh);
       this.objects.push(mesh);
     }
@@ -356,6 +475,36 @@ export class WorldBuilder {
     this.objects.push(mesh);
   }
 
+  _buildWater() {
+    const W = GameConfig.WORLD_WIDTH;
+    const H = GameConfig.WORLD_HEIGHT;
+    const cx = W / 2, cz = H / 2;
+
+    // Water pool at map center
+    const waterGeo = this.assets.getGeometry('waterPool');
+    const waterMat = this.assets.getMaterial('water');
+    if (!waterGeo || !waterMat) return;
+
+    const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+    waterMesh.rotation.x = -Math.PI / 2;
+    waterMesh.position.set(cx, -0.5, cz);
+    waterMesh.receiveShadow = true;
+    this.scene.add(waterMesh);
+    this.objects.push(waterMesh);
+    this._waterTexture = this.assets.getTexture('water');
+
+    // Dirt ring around water
+    const edgeGeo = this.assets.getGeometry('waterEdgeRing');
+    const edgeMat = this.assets.getMaterial('waterEdge');
+    if (edgeGeo && edgeMat) {
+      const edgeMesh = new THREE.Mesh(edgeGeo, edgeMat);
+      edgeMesh.rotation.x = -Math.PI / 2;
+      edgeMesh.position.set(cx, 0.05, cz);
+      this.scene.add(edgeMesh);
+      this.objects.push(edgeMesh);
+    }
+  }
+
   _buildLighting() {
     const W = GameConfig.WORLD_WIDTH;
     const H = GameConfig.WORLD_HEIGHT;
@@ -428,20 +577,21 @@ export class WorldBuilder {
       this.objects.push(light);
     }
 
-    // ─── DAY ZONE ground overlay (warm tint on north half) ───────
-    const dayOverlayGeo = new THREE.PlaneGeometry(W, H / 2);
-    const dayOverlayMat = new THREE.MeshStandardMaterial({
-      color: 0x3a3520, transparent: true, opacity: 0.15,
-      roughness: 1, metalness: 0, side: THREE.DoubleSide, depthWrite: false
-    });
-    const dayOverlay = new THREE.Mesh(dayOverlayGeo, dayOverlayMat);
-    dayOverlay.rotation.x = -Math.PI / 2;
-    dayOverlay.position.set(W / 2, 0.1, H / 4);
-    this.scene.add(dayOverlay);
-    this.objects.push(dayOverlay);
-
-    // Atmospheric fog (lighter, matches background)
+    // Atmospheric fog (matches sky dome)
     this.scene.fog = new THREE.FogExp2(0x1a2a3a, 0.00025);
+  }
+
+  updateSky(dt) {
+    if (this._skyMaterial) {
+      this._skyMaterial.uniforms.uTime.value += dt;
+    }
+  }
+
+  updateWater(dt) {
+    if (this._waterTexture) {
+      this._waterTexture.offset.x += dt * 0.02;
+      this._waterTexture.offset.y += dt * 0.015;
+    }
   }
 
   updateLightTarget(x, z) {

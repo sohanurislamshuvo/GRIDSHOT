@@ -35,7 +35,7 @@ export class Game {
     this.world = null;
     this.loop = new GameLoop(
       (dt) => this.update(dt),
-      () => this.renderer.render()
+      (dt) => this.renderer.render(dt)
     );
 
     // Entity collections
@@ -169,8 +169,10 @@ export class Game {
     // Update particles
     this.particles.update(dt);
 
-    // Update light position
+    // Update world animations + light position
     if (this.world) {
+      this.world.updateSky(dt);
+      this.world.updateWater(dt);
       this.world.updateLightTarget(this.player.x, this.player.y);
     }
 

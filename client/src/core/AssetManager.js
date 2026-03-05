@@ -87,26 +87,117 @@ export class AssetManager {
       metalness: 0.15
     });
 
-    // ─── WALL MATERIAL ─────────────────────────────────────────
+    // ─── ENHANCED WALL MATERIAL ─────────────────────────────────
     const wallCanvas = document.createElement('canvas');
-    wallCanvas.width = 128;
-    wallCanvas.height = 128;
+    wallCanvas.width = 256;
+    wallCanvas.height = 256;
     const wCtx = wallCanvas.getContext('2d');
-    wCtx.fillStyle = '#444450';
-    wCtx.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 2000; i++) {
-      const v = 55 + Math.random() * 30;
-      wCtx.fillStyle = `rgba(${v}, ${v}, ${v + 5}, 0.4)`;
-      wCtx.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 3, 1 + Math.random() * 3);
+
+    // Base concrete color
+    wCtx.fillStyle = '#3e3e48';
+    wCtx.fillRect(0, 0, 256, 256);
+
+    // Surface noise
+    for (let i = 0; i < 6000; i++) {
+      const v = 45 + Math.random() * 35;
+      wCtx.fillStyle = `rgba(${v}, ${v}, ${v + 5}, 0.3)`;
+      wCtx.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
     }
-    wCtx.strokeStyle = 'rgba(30, 30, 35, 0.6)';
+
+    // Panel lines (horizontal seams)
+    wCtx.strokeStyle = 'rgba(25, 25, 30, 0.7)';
     wCtx.lineWidth = 2;
-    wCtx.strokeRect(2, 2, 124, 124);
+    for (const y of [64, 128, 192]) {
+      wCtx.beginPath(); wCtx.moveTo(0, y); wCtx.lineTo(256, y); wCtx.stroke();
+      wCtx.strokeStyle = 'rgba(70, 70, 80, 0.3)';
+      wCtx.beginPath(); wCtx.moveTo(0, y + 2); wCtx.lineTo(256, y + 2); wCtx.stroke();
+      wCtx.strokeStyle = 'rgba(25, 25, 30, 0.7)';
+    }
+    // Vertical seams
+    for (const x of [85, 170]) {
+      wCtx.beginPath(); wCtx.moveTo(x, 0); wCtx.lineTo(x, 256); wCtx.stroke();
+    }
+
+    // Cracks (random-walk dark lines)
+    wCtx.strokeStyle = 'rgba(15, 15, 20, 0.6)';
+    wCtx.lineWidth = 1;
+    for (let c = 0; c < 4; c++) {
+      let cx = Math.random() * 256, cy = Math.random() * 256;
+      wCtx.beginPath();
+      wCtx.moveTo(cx, cy);
+      for (let s = 0; s < 12; s++) {
+        cx += (Math.random() - 0.5) * 20;
+        cy += (Math.random() - 0.3) * 15;
+        wCtx.lineTo(cx, cy);
+      }
+      wCtx.stroke();
+    }
+
+    // Rust / weathering patches (orange-brown near bottom)
+    for (let i = 0; i < 3; i++) {
+      const rx = Math.random() * 200 + 28;
+      const ry = 180 + Math.random() * 60;
+      const rr = 10 + Math.random() * 18;
+      const grad = wCtx.createRadialGradient(rx, ry, 0, rx, ry, rr);
+      grad.addColorStop(0, 'rgba(90, 55, 30, 0.35)');
+      grad.addColorStop(1, 'rgba(90, 55, 30, 0)');
+      wCtx.fillStyle = grad;
+      wCtx.fillRect(rx - rr, ry - rr, rr * 2, rr * 2);
+    }
+
+    // Bolt / rivet dots at panel intersections
+    wCtx.fillStyle = 'rgba(60, 60, 70, 0.8)';
+    for (const x of [85, 170]) {
+      for (const y of [64, 128, 192]) {
+        wCtx.beginPath(); wCtx.arc(x, y, 3, 0, Math.PI * 2); wCtx.fill();
+        wCtx.fillStyle = 'rgba(80, 80, 90, 0.4)';
+        wCtx.beginPath(); wCtx.arc(x + 1, y + 1, 2, 0, Math.PI * 2); wCtx.fill();
+        wCtx.fillStyle = 'rgba(60, 60, 70, 0.8)';
+      }
+    }
+
+    // Outer border
+    wCtx.strokeStyle = 'rgba(25, 25, 30, 0.6)';
+    wCtx.lineWidth = 3;
+    wCtx.strokeRect(2, 2, 252, 252);
 
     const wallTexture = new THREE.CanvasTexture(wallCanvas);
 
+    // ─── WALL NORMAL MAP ────────────────────────────────────────
+    const wallNormCanvas = document.createElement('canvas');
+    wallNormCanvas.width = 256;
+    wallNormCanvas.height = 256;
+    const nCtx = wallNormCanvas.getContext('2d');
+    // Flat normal: rgb(128, 128, 255)
+    nCtx.fillStyle = 'rgb(128, 128, 255)';
+    nCtx.fillRect(0, 0, 256, 256);
+    // Panel edge normals (indentation)
+    nCtx.strokeStyle = 'rgb(100, 128, 255)';
+    nCtx.lineWidth = 3;
+    for (const y of [64, 128, 192]) {
+      nCtx.beginPath(); nCtx.moveTo(0, y); nCtx.lineTo(256, y); nCtx.stroke();
+    }
+    for (const x of [85, 170]) {
+      nCtx.beginPath(); nCtx.moveTo(x, 0); nCtx.lineTo(x, 256); nCtx.stroke();
+    }
+    // Highlight edges
+    nCtx.strokeStyle = 'rgb(155, 128, 255)';
+    nCtx.lineWidth = 1;
+    for (const y of [66, 130, 194]) {
+      nCtx.beginPath(); nCtx.moveTo(0, y); nCtx.lineTo(256, y); nCtx.stroke();
+    }
+    // Noise for roughness variation
+    for (let i = 0; i < 2000; i++) {
+      const v = 120 + Math.random() * 16;
+      nCtx.fillStyle = `rgb(${v}, ${128}, ${245 + Math.random() * 20})`;
+      nCtx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+    }
+    const wallNormalTexture = new THREE.CanvasTexture(wallNormCanvas);
+
     this._materials.wall = new THREE.MeshStandardMaterial({
       map: wallTexture,
+      normalMap: wallNormalTexture,
+      normalScale: new THREE.Vector2(0.5, 0.5),
       roughness: 0.75,
       metalness: 0.2,
       color: 0x556677
@@ -232,10 +323,102 @@ export class AssetManager {
       color: 0x1a3a1a, roughness: 0.95, metalness: 0.0,
       transparent: true, opacity: 0.4, side: THREE.DoubleSide
     });
+
+    // ─── TERRAIN ZONE TEXTURES ───────────────────────────────────
+    // Grass texture (north / day zone overlay)
+    const grassCanvas = document.createElement('canvas');
+    grassCanvas.width = 512; grassCanvas.height = 512;
+    const grCtx = grassCanvas.getContext('2d');
+    grCtx.fillStyle = '#2a3a1a';
+    grCtx.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 10000; i++) {
+      const g = 30 + Math.random() * 40;
+      const r = 20 + Math.random() * 20;
+      grCtx.fillStyle = `rgba(${r}, ${g + 20}, ${r - 5}, ${0.2 + Math.random() * 0.3})`;
+      grCtx.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 3, 1 + Math.random() * 4);
+    }
+    // Sparse grass blades
+    grCtx.strokeStyle = 'rgba(40, 80, 30, 0.3)';
+    grCtx.lineWidth = 1;
+    for (let i = 0; i < 200; i++) {
+      const bx = Math.random() * 512;
+      const by = Math.random() * 512;
+      grCtx.beginPath(); grCtx.moveTo(bx, by); grCtx.lineTo(bx + (Math.random() - 0.5) * 6, by - 4 - Math.random() * 8); grCtx.stroke();
+    }
+    const grassTexture = new THREE.CanvasTexture(grassCanvas);
+    grassTexture.wrapS = THREE.RepeatWrapping;
+    grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.repeat.set(GameConfig.WORLD_WIDTH / 1024, (GameConfig.WORLD_HEIGHT / 2) / 1024);
+    this._materials.groundGrass = new THREE.MeshStandardMaterial({
+      map: grassTexture, roughness: 0.9, metalness: 0.0,
+      transparent: true, opacity: 0.4, depthWrite: false
+    });
+
+    // Dirt texture (paths)
+    const dirtCanvas = document.createElement('canvas');
+    dirtCanvas.width = 256; dirtCanvas.height = 256;
+    const dCtx = dirtCanvas.getContext('2d');
+    dCtx.fillStyle = '#3a2a1a';
+    dCtx.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 4000; i++) {
+      const v = 35 + Math.random() * 30;
+      dCtx.fillStyle = `rgba(${v + 15}, ${v}, ${v - 10}, ${0.3 + Math.random() * 0.3})`;
+      dCtx.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+    }
+    const dirtTexture = new THREE.CanvasTexture(dirtCanvas);
+    dirtTexture.wrapS = THREE.RepeatWrapping;
+    dirtTexture.wrapT = THREE.RepeatWrapping;
+    this._materials.groundDirt = new THREE.MeshStandardMaterial({
+      map: dirtTexture, roughness: 0.95, metalness: 0.0,
+      transparent: true, opacity: 0.3, depthWrite: false
+    });
+
+    // ─── WATER MATERIAL ──────────────────────────────────────────
+    const waterCanvas = document.createElement('canvas');
+    waterCanvas.width = 256; waterCanvas.height = 256;
+    const wtCtx = waterCanvas.getContext('2d');
+    wtCtx.fillStyle = '#0a1520';
+    wtCtx.fillRect(0, 0, 256, 256);
+    // Caustic patterns
+    for (let i = 0; i < 3000; i++) {
+      const b = 15 + Math.random() * 35;
+      const g = 20 + Math.random() * 30;
+      wtCtx.fillStyle = `rgba(${5}, ${g}, ${b + 10}, ${0.2 + Math.random() * 0.3})`;
+      wtCtx.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 4, 2 + Math.random() * 4);
+    }
+    // Light caustic streaks
+    wtCtx.strokeStyle = 'rgba(30, 60, 80, 0.15)';
+    wtCtx.lineWidth = 2;
+    for (let i = 0; i < 15; i++) {
+      wtCtx.beginPath();
+      wtCtx.moveTo(Math.random() * 256, Math.random() * 256);
+      wtCtx.quadraticCurveTo(Math.random() * 256, Math.random() * 256, Math.random() * 256, Math.random() * 256);
+      wtCtx.stroke();
+    }
+    const waterTexture = new THREE.CanvasTexture(waterCanvas);
+    waterTexture.wrapS = THREE.RepeatWrapping;
+    waterTexture.wrapT = THREE.RepeatWrapping;
+    waterTexture.repeat.set(2, 2);
+    this._textures = this._textures || {};
+    this._textures.water = waterTexture;
+    this._materials.water = new THREE.MeshStandardMaterial({
+      map: waterTexture, color: 0x112233,
+      roughness: 0.05, metalness: 0.8,
+      transparent: true, opacity: 0.85
+    });
+    this._materials.waterEdge = new THREE.MeshStandardMaterial({
+      color: 0x2a1a0a, roughness: 0.95, metalness: 0.0,
+      transparent: true, opacity: 0.5, depthWrite: false
+    });
+
+    // Water geometry
+    this._geometries.waterPool = new THREE.CircleGeometry(70, 32);
+    this._geometries.waterEdgeRing = new THREE.RingGeometry(68, 85, 32);
   }
 
   getMaterial(name) { return this._materials[name]; }
   getBotMaterial(type) { return this._materials.bot[type]; }
   getBotEyeMaterial(type) { return this._materials.botEye[type]; }
   getGeometry(name) { return this._geometries[name]; }
+  getTexture(name) { return this._textures?.[name]; }
 }

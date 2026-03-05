@@ -27,7 +27,7 @@ export class GameLoop {
     const dt = Math.min((now - this._lastTime) / 1000, 0.05); // Cap at 50ms
     this._lastTime = now;
     this.updateFn(dt);
-    this.renderFn();
+    this.renderFn(dt);
     this._rafId = requestAnimationFrame(() => this._tick());
   }
 }
