@@ -52,6 +52,12 @@ export class HUD {
       <div class="hud-view-mode">TPP</div>
       <div class="hud-hitmarker"></div>
       <div class="hud-respawn">RESPAWNING...</div>
+      <div class="hud-skydive">
+        <div class="hud-skydive-text">CHOOSE LANDING ZONE</div>
+        <div class="hud-skydive-alt">ALT: 1200m</div>
+        <div class="hud-skydive-prompt">CLICK TO LAND</div>
+        <div class="hud-skydive-marker"></div>
+      </div>
       <div class="hud-result"></div>
       <div class="hud-minimap">
         <canvas class="minimap-canvas" width="160" height="160"></canvas>
@@ -73,6 +79,8 @@ export class HUD {
     this._killFeedEl = this.el.querySelector('.hud-kill-feed');
     this._compassCanvas = this.el.querySelector('.hud-compass');
     this._compassCtx = this._compassCanvas.getContext('2d');
+    this._skydiveEl = this.el.querySelector('.hud-skydive');
+    this._skydiveAltEl = this.el.querySelector('.hud-skydive-alt');
     this._abilityEls = {};
 
     this.el.querySelectorAll('.hud-ability').forEach(el => {
@@ -206,6 +214,20 @@ export class HUD {
     this._radarTimeout = setTimeout(() => {
       this._radarEnemies = null;
     }, duration);
+  }
+
+  // ─── SKYDIVE ────────────────────────────────────────────────
+  showSkydive() {
+    this._skydiveEl.style.display = 'block';
+    this._respawnEl.style.display = 'none';
+  }
+
+  hideSkydive() {
+    this._skydiveEl.style.display = 'none';
+  }
+
+  updateSkydiveAlt(height) {
+    this._skydiveAltEl.textContent = `ALT: ${Math.round(height)}m`;
   }
 
   // ─── KILL FEED ───────────────────────────────────────────────

@@ -488,6 +488,91 @@
   background: rgba(5, 5, 15, 0.7);
 }
 
+/* ─── SKYDIVE ───────────────────────────────────────────────── */
+.hud-skydive {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  display: none;
+}
+
+.hud-skydive-text {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 28px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 4px;
+  text-shadow: 0 0 20px rgba(68, 136, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.hud-skydive-alt {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 18px;
+  color: #4488ff;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(68, 136, 255, 0.4);
+}
+
+.hud-skydive-prompt {
+  position: absolute;
+  bottom: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  color: #ffaa00;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+  animation: skydive-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skydive-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.hud-skydive-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border: 2px solid rgba(68, 136, 255, 0.8);
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(68, 136, 255, 0.4), inset 0 0 10px rgba(68, 136, 255, 0.2);
+}
+.hud-skydive-marker::before,
+.hud-skydive-marker::after {
+  content: '';
+  position: absolute;
+  background: rgba(68, 136, 255, 0.6);
+}
+.hud-skydive-marker::before {
+  width: 2px;
+  height: 14px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.hud-skydive-marker::after {
+  width: 14px;
+  height: 2px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
 /* ─── MOBILE ─────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .menu-title { font-size: 36px; }

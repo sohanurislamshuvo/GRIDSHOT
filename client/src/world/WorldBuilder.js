@@ -581,6 +581,42 @@ export class WorldBuilder {
     this.scene.fog = new THREE.FogExp2(0x1a2a3a, 0.00025);
   }
 
+  showLandingMarker(x, z) {
+    if (!this._landingMarker) {
+      const ringGeo = new THREE.RingGeometry(18, 22, 32);
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: 0x4488ff, emissive: 0x4488ff, emissiveIntensity: 1.5,
+        transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false
+      });
+      this._landingMarker = new THREE.Mesh(ringGeo, ringMat);
+      this._landingMarker.rotation.x = -Math.PI / 2;
+      this._landingMarker.position.y = 0.5;
+      this.scene.add(this._landingMarker);
+
+      // Inner dot
+      const dotGeo = new THREE.CircleGeometry(4, 16);
+      const dotMat = new THREE.MeshStandardMaterial({
+        color: 0x4488ff, emissive: 0x4488ff, emissiveIntensity: 2.0,
+        transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false
+      });
+      this._landingDot = new THREE.Mesh(dotGeo, dotMat);
+      this._landingDot.rotation.x = -Math.PI / 2;
+      this._landingDot.position.y = 0.6;
+      this.scene.add(this._landingDot);
+    }
+    this._landingMarker.position.x = x;
+    this._landingMarker.position.z = z;
+    this._landingDot.position.x = x;
+    this._landingDot.position.z = z;
+    this._landingMarker.visible = true;
+    this._landingDot.visible = true;
+  }
+
+  hideLandingMarker() {
+    if (this._landingMarker) this._landingMarker.visible = false;
+    if (this._landingDot) this._landingDot.visible = false;
+  }
+
   updateSky(dt) {
     if (this._skyMaterial) {
       this._skyMaterial.uniforms.uTime.value += dt;

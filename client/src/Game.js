@@ -15,7 +15,7 @@ import { UIManager } from './ui/UIManager.js';
 import { GameConfig } from 'shadow-arena-shared/config/GameConfig.js';
 import { BotType } from 'shadow-arena-shared/entities/BotEntity.js';
 
-const State = { MENU: 'MENU', CONNECTING: 'CONNECTING', PLAYING: 'PLAYING', GAME_OVER: 'GAME_OVER' };
+const State = { MENU: 'MENU', CONNECTING: 'CONNECTING', PLAYING: 'PLAYING', SKYDIVING: 'SKYDIVING', GAME_OVER: 'GAME_OVER' };
 
 export class Game {
   constructor(container, uiRoot) {
@@ -139,6 +139,12 @@ export class Game {
   // ─── GAME LOOP ────────────────────────────────────────────────────
 
   update(dt) {
+    // Handle skydive state
+    if (this.state === State.SKYDIVING) {
+      this.updateSkydive(dt);
+      return;
+    }
+
     if (this.state !== State.PLAYING) return;
     if (!this.player || !this.input) return;
 
@@ -606,9 +612,110 @@ export class Game {
   }
 
   handlePlayerDeath() {
-    setTimeout(() => {
-      this.player.respawn(GameConfig.WORLD_WIDTH / 2, GameConfig.WORLD_HEIGHT / 2);
-    }, GameConfig.PLAYER_RESPAWN_TIME);
+    // Show "RESPAWNING..." for 2s, then enter skydive
+    setTimeout(() => this.enterSkydive(), 2000);
+  }
+
+  // ─── SKYDIVE RESPAWN ────────────────────────────────────────────
+
+  enterSkydive() {
+    this.state = State.SKYDIVING;
+    this._skydiveX = GameConfig.WORLD_WIDTH / 2;
+    this._skydiveZ = GameConfig.WORLD_HEIGHT / 2;
+    this._skydiveDescending = false;
+    this._descentStart = 0;
+    this._descentDuration = 1500; // 1.5s descent
+
+    // Listen for click/space to land
+    this._skydiveLandHandler = (e) => {
+      if (e.type === 'mousedown' && e.button === 0) this.beginDescent();
+      if (e.type === 'keydown' && e.code === 'Space') this.beginDescent();
+    };
+    window.addEventListener('mousedown', this._skydiveLandHandler);
+    window.addEventListener('keydown', this._skydiveLandHandler);
+
+    // Show skydive HUD
+    this.ui.hud.showSkydive();
+    if (this.world) this.world.showLandingMarker(this._skydiveX, this._skydiveZ);
+  }
+
+  updateSkydive(dt) {
+    if (!this.input) return;
+    const input = this.input.getInput();
+
+    // Handle ESC during skydive
+    if (input.escape) {
+      this._cleanupSkydive();
+      this.returnToMenu();
+      return;
+    }
+
+    // Keep world animating
+    this.particles.update(dt);
+    if (this.world) {
+      this.world.updateSky(dt);
+      this.world.updateWater(dt);
+    }
+
+    // Descending animation
+    if (this._skydiveDescending) {
+      const elapsed = performance.now() - this._descentStart;
+      const progress = Math.min(elapsed / this._descentDuration, 1);
+      this.renderer.descendCamera(this._skydiveX, this._skydiveZ, progress);
+      this.ui.hud.updateSkydiveAlt(Math.round(1200 * (1 - progress)));
+
+      if (progress >= 1) {
+        this._finishLanding();
+      }
+      return;
+    }
+
+    // Move landing position with WASD
+    const speed = 400;
+    const margin = 100;
+    if (input.up) this._skydiveZ -= speed * dt;
+    if (input.down) this._skydiveZ += speed * dt;
+    if (input.left) this._skydiveX -= speed * dt;
+    if (input.right) this._skydiveX += speed * dt;
+
+    // Clamp to world bounds
+    this._skydiveX = Math.max(margin, Math.min(GameConfig.WORLD_WIDTH - margin, this._skydiveX));
+    this._skydiveZ = Math.max(margin, Math.min(GameConfig.WORLD_HEIGHT - margin, this._skydiveZ));
+
+    // Update camera and marker
+    this.renderer.followSkydive(this._skydiveX, this._skydiveZ);
+    if (this.world) this.world.showLandingMarker(this._skydiveX, this._skydiveZ);
+    this.ui.hud.updateSkydiveAlt(1200);
+  }
+
+  beginDescent() {
+    if (this._skydiveDescending) return;
+    this._skydiveDescending = true;
+    this._descentStart = performance.now();
+  }
+
+  _finishLanding() {
+    // Respawn player at chosen position
+    this.player.respawn(this._skydiveX, this._skydiveZ);
+    this.state = State.PLAYING;
+
+    // Clean up skydive
+    this._cleanupSkydive();
+    this.ui.hud.hideSkydive();
+    if (this.world) this.world.hideLandingMarker();
+
+    // Reset camera to TPP
+    this.renderer.setCameraPosition(this._skydiveX, this._skydiveZ);
+  }
+
+  _cleanupSkydive() {
+    if (this._skydiveLandHandler) {
+      window.removeEventListener('mousedown', this._skydiveLandHandler);
+      window.removeEventListener('keydown', this._skydiveLandHandler);
+      this._skydiveLandHandler = null;
+    }
+    this.ui.hud.hideSkydive();
+    if (this.world) this.world.hideLandingMarker();
   }
 
   getAbilityCooldowns() {

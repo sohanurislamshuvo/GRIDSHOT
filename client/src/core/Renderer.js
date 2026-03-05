@@ -216,6 +216,39 @@ export class Renderer {
     this.camera.lookAt(lookX, lookY, lookZ);
   }
 
+  followSkydive(gameX, gameZ, height = 1200) {
+    const targetX = gameX;
+    const targetY = height;
+    const targetZ = gameZ + 100;
+    this.camera.position.x += (targetX - this.camera.position.x) * 0.08;
+    this.camera.position.y += (targetY - this.camera.position.y) * 0.08;
+    this.camera.position.z += (targetZ - this.camera.position.z) * 0.08;
+    this.camera.lookAt(gameX, 0, gameZ);
+
+    // Wider FOV for map overview
+    if (Math.abs(this.camera.fov - 60) > 0.1) {
+      this.camera.fov += (60 - this.camera.fov) * 0.1;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
+  descendCamera(gameX, gameZ, progress) {
+    // progress: 0 (sky) → 1 (ground/TPP)
+    const skyHeight = 1200;
+    const tppHeight = 800;
+    const ease = progress * (2 - progress); // ease-out
+    const height = skyHeight + (tppHeight - skyHeight) * ease;
+    const zOffset = 100 + (350 - 100) * ease; // from skydive offset to TPP offset
+
+    this.camera.position.set(gameX, height, gameZ + zOffset);
+    this.camera.lookAt(gameX, 0, gameZ);
+
+    // Transition FOV from 60 → 45
+    const fov = 60 + (45 - 60) * ease;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
+  }
+
   setCameraPosition(gameX, gameY) {
     this.camera.position.set(gameX, 800, gameY + 350);
     this.camera.lookAt(gameX, 0, gameY);
