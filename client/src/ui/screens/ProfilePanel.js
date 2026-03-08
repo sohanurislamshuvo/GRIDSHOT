@@ -8,6 +8,7 @@ function escapeHTML(str) {
 export class ProfilePanel {
   constructor(root, game) {
     this.game = game;
+    this._playerStats = null;
     this.el = document.createElement('div');
     this.el.className = 'profile-panel';
     this.el.style.display = 'none';
@@ -17,12 +18,14 @@ export class ProfilePanel {
         <div class="profile-tabs">
           <button class="profile-tab active" data-tab="skins">SKINS</button>
           <button class="profile-tab" data-tab="achievements">ACHIEVEMENTS</button>
+          <button class="profile-tab" data-tab="stats">STATS</button>
           <button class="profile-tab" data-tab="friends">FRIENDS</button>
         </div>
       </div>
       <div class="profile-content">
         <div class="profile-tab-content" data-tab="skins"></div>
         <div class="profile-tab-content" data-tab="achievements" style="display:none"></div>
+        <div class="profile-tab-content" data-tab="stats" style="display:none"></div>
         <div class="profile-tab-content" data-tab="friends" style="display:none"></div>
       </div>
     `;
@@ -48,12 +51,27 @@ export class ProfilePanel {
   show() {
     this.el.style.display = 'flex';
     this._renderSkins();
-    this._renderAchievements();
+    this._fetchStats().then(() => {
+      this._renderAchievements();
+      this._renderStats();
+    });
     this._renderFriends();
   }
 
   hide() {
     this.el.style.display = 'none';
+  }
+
+  _fetchStats() {
+    const playerId = localStorage.getItem('sa_playerId');
+    if (!playerId) {
+      this._playerStats = null;
+      return Promise.resolve();
+    }
+    return fetch(`/api/player/${playerId}/stats`)
+      .then(r => r.json())
+      .then(data => { this._playerStats = data; })
+      .catch(() => { this._playerStats = null; });
   }
 
   _renderSkins() {
@@ -133,23 +151,116 @@ export class ProfilePanel {
   _renderAchievements() {
     const container = this.el.querySelector('[data-tab="achievements"]');
     const unlocked = this.game.unlockedAchievements || [];
+    const detailed = this._playerStats?.detailedStats || {};
 
     let html = '<div class="achievement-grid">';
     for (const [id, ach] of Object.entries(AchievementConfig)) {
       const isUnlocked = unlocked.includes(id);
       const cls = `achievement-card${isUnlocked ? ' unlocked' : ''}`;
+
+      let progressHtml = '';
+      if (!isUnlocked) {
+        const current = detailed[ach.condition.stat] || 0;
+        const threshold = ach.condition.threshold;
+        const pct = Math.min(100, Math.round((current / threshold) * 100));
+        progressHtml = `
+          <div class="achievement-progress">
+            <div class="achievement-progress-bar" style="width:${pct}%"></div>
+          </div>
+          <div class="achievement-progress-text">${current} / ${threshold}</div>
+        `;
+      }
+
       html += `<div class="${cls}">
         <div class="achievement-icon">${ach.icon}</div>
         <div class="achievement-info">
           <div class="achievement-name">${ach.name}</div>
           <div class="achievement-desc">${ach.description}</div>
           <div class="achievement-reward">+${ach.xpReward} XP</div>
+          ${progressHtml}
         </div>
         <div class="achievement-status">${isUnlocked ? 'UNLOCKED' : 'LOCKED'}</div>
       </div>`;
     }
     html += '</div>';
     container.innerHTML = html;
+  }
+
+  _renderStats() {
+    const container = this.el.querySelector('[data-tab="stats"]');
+    const s = this._playerStats;
+
+    if (!s) {
+      container.innerHTML = '<div class="friends-login-prompt">Log in to view your stats</div>';
+      return;
+    }
+
+    const d = s.detailedStats || {};
+    const winRate = (s.wins + s.losses) > 0 ? Math.round((s.wins / (s.wins + s.losses)) * 100) : 0;
+    const xpPct = s.xpForNextLevel > 0 ? Math.min(100, Math.round((s.currentLevelXP / s.xpForNextLevel) * 100)) : 100;
+    const tierColor = s.rank?.color || '#ccc';
+
+    let html = `
+      <div class="stats-section">
+        <h3 class="section-title">OVERVIEW</h3>
+        <div class="stats-overview">
+          <div class="stats-level-row">
+            <span class="stats-level">LEVEL ${s.level}</span>
+            <span class="stats-rank" style="color:${tierColor}">${s.rank?.name || 'Unranked'}</span>
+          </div>
+          <div class="stats-xp-bar-bg">
+            <div class="stats-xp-bar-fill" style="width:${xpPct}%"></div>
+          </div>
+          <div class="stats-xp-text">${s.currentLevelXP} / ${s.xpForNextLevel} XP</div>
+          <div class="stats-rating">ELO Rating: <strong>${s.rating}</strong></div>
+        </div>
+      </div>
+
+      <div class="stats-section">
+        <h3 class="section-title">COMBAT</h3>
+        <div class="stats-grid">
+          ${this._statRow('Total Kills', s.kills)}
+          ${this._statRow('Total Deaths', s.deaths)}
+          ${this._statRow('K/D Ratio', s.kd)}
+          ${this._statRow('Bot Kills', d.totalBotKills || 0)}
+          ${this._statRow('Boss Kills', d.totalBossKills || 0)}
+        </div>
+      </div>
+
+      <div class="stats-section">
+        <h3 class="section-title">MATCHES</h3>
+        <div class="stats-grid">
+          ${this._statRow('Total Matches', d.totalMatches || 0)}
+          ${this._statRow('Wins', s.wins)}
+          ${this._statRow('Losses', s.losses)}
+          ${this._statRow('Win Rate', winRate + '%')}
+        </div>
+      </div>
+
+      <div class="stats-section">
+        <h3 class="section-title">WEAPONS</h3>
+        <div class="stats-grid">
+          ${this._statRow('Sniper Kills', d.sniperKills || 0)}
+          ${this._statRow('Shotgun Kills', d.shotgunKills || 0)}
+        </div>
+      </div>
+
+      <div class="stats-section">
+        <h3 class="section-title">MODES</h3>
+        <div class="stats-grid">
+          ${this._statRow('BR Wins', d.brWins || 0)}
+          ${this._statRow('Flag Captures', d.flagCaptures || 0)}
+          ${this._statRow('KOTH Wins', d.kothWins || 0)}
+          ${this._statRow('Waves Survived', d.totalWavesSurvived || 0)}
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = html;
+  }
+
+  _statRow(label, value) {
+    return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
   }
 
   _renderFriends() {

@@ -1,7 +1,8 @@
 const MODE_LABELS = {
   duel: '1v1 DUEL',
   team2v2: '2v2 TEAM',
-  team3v3: '3v3 TEAM'
+  team3v3: '3v3 TEAM',
+  custom: 'CUSTOM MATCH'
 };
 
 export class LobbyScreen {
@@ -10,6 +11,7 @@ export class LobbyScreen {
     this._mode = 'duel';
     this._isHost = false;
     this._maxPlayers = 2;
+    this._minPlayers = 2;
 
     this.el = document.createElement('div');
     this.el.className = 'lobby-screen';
@@ -128,9 +130,10 @@ export class LobbyScreen {
     this.el.style.display = 'none';
   }
 
-  showLobby(code, players, maxPlayers, isHost) {
+  showLobby(code, players, maxPlayers, isHost, minPlayers) {
     this._isHost = isHost;
     this._maxPlayers = maxPlayers;
+    this._minPlayers = minPlayers || maxPlayers;
     this._initialEl.style.display = 'none';
     this._viewEl.style.display = 'flex';
     this._statusEl.textContent = '';
@@ -139,11 +142,16 @@ export class LobbyScreen {
     this.updatePlayers(players, maxPlayers);
   }
 
-  updatePlayers(players, maxPlayers) {
+  updatePlayers(players, maxPlayers, minPlayers) {
     this._maxPlayers = maxPlayers || this._maxPlayers;
+    if (minPlayers != null) this._minPlayers = minPlayers;
     const isTeamMode = this._mode === 'team2v2' || this._mode === 'team3v3';
+    const isCustom = this._mode === 'custom';
 
-    let html = `<div class="lobby-players-title">PLAYERS (${players.length}/${this._maxPlayers})</div>`;
+    const countLabel = isCustom
+      ? `PLAYERS (${players.length})`
+      : `PLAYERS (${players.length}/${this._maxPlayers})`;
+    let html = `<div class="lobby-players-title">${countLabel}</div>`;
 
     for (const p of players) {
       const hostTag = p.isHost ? ' (Host)' : '';
@@ -155,22 +163,29 @@ export class LobbyScreen {
       </div>`;
     }
 
-    // Empty slots
-    for (let i = players.length; i < this._maxPlayers; i++) {
-      const team = isTeamMode ? (i < this._maxPlayers / 2 ? 'red' : 'blue') : '';
-      const teamLabel = isTeamMode ? `<span class="lobby-team-tag ${team}">${team.toUpperCase()}</span>` : '';
-      html += `<div class="lobby-player empty">
-        <span class="lobby-player-name">Waiting...</span>
-        ${teamLabel}
-      </div>`;
+    // Empty slots (skip for custom mode - no fixed max to show)
+    if (!isCustom) {
+      for (let i = players.length; i < this._maxPlayers; i++) {
+        const team = isTeamMode ? (i < this._maxPlayers / 2 ? 'red' : 'blue') : '';
+        const teamLabel = isTeamMode ? `<span class="lobby-team-tag ${team}">${team.toUpperCase()}</span>` : '';
+        html += `<div class="lobby-player empty">
+          <span class="lobby-player-name">Waiting...</span>
+          ${teamLabel}
+        </div>`;
+      }
     }
 
     this._playersEl.innerHTML = html;
 
-    // Enable/disable start button
-    const isFull = players.length >= this._maxPlayers;
-    this._startBtn.disabled = !isFull;
-    this._startBtn.textContent = isFull ? 'START MATCH' : `WAITING (${players.length}/${this._maxPlayers})`;
+    // Enable/disable start button based on minPlayers
+    const hasEnough = players.length >= this._minPlayers;
+    this._startBtn.disabled = !hasEnough;
+    if (hasEnough) {
+      this._startBtn.textContent = 'START MATCH';
+    } else {
+      const needed = this._minPlayers - players.length;
+      this._startBtn.textContent = `NEED ${needed} MORE`;
+    }
   }
 
   _fallbackCopy(text) {

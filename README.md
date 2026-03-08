@@ -52,7 +52,7 @@ node server/src/index.js
 ```bash
 # Terminal 2 -- Start the client dev server
 cd client
-npx vite
+npx vite --host
 ```
 
 Open `http://localhost:5173` in your browser. Solo mode works without the server; online modes require the server running on port 3000.

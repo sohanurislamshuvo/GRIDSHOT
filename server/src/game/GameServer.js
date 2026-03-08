@@ -1,5 +1,6 @@
 import { MessageTypes } from 'shadow-arena-shared/utils/MessageTypes.js';
 import { AchievementConfig, checkAchievements } from 'shadow-arena-shared/config/AchievementConfig.js';
+import { ProgressionSystem } from 'shadow-arena-shared/systems/ProgressionSystem.js';
 import { RoomManager } from './matchmaking/RoomManager.js';
 
 export class GameServer {
@@ -131,14 +132,30 @@ export class GameServer {
     // Check for new achievements
     const newlyUnlocked = checkAchievements(updatedStats, unlockedIds);
 
+    // Calculate match XP
+    const matchXP = ProgressionSystem.calculateMatchXP({
+      botKills: matchStats.botKills || 0,
+      playerKills: matchStats.kills || 0,
+      bossKills: matchStats.bossKills || 0,
+      won: matchStats.won,
+      wavesCleared: matchStats.wavesCleared || 0
+    });
+
     // Save new achievements and grant XP
-    let bonusXP = 0;
+    let achievementXP = 0;
     const socket = this.playerSockets.get(socketId);
+    const newAchievementDetails = [];
     for (const achId of newlyUnlocked) {
       this.playerRepo.unlockAchievement(auth.playerId, achId);
-      bonusXP += AchievementConfig[achId].xpReward;
+      achievementXP += AchievementConfig[achId].xpReward;
+      newAchievementDetails.push({
+        id: achId,
+        name: AchievementConfig[achId].name,
+        icon: AchievementConfig[achId].icon,
+        xpReward: AchievementConfig[achId].xpReward
+      });
 
-      // Notify client
+      // Notify client (toast)
       if (socket) {
         socket.emit(MessageTypes.ACHIEVEMENT_UNLOCKED, {
           id: achId,
@@ -150,17 +167,37 @@ export class GameServer {
       }
     }
 
+    // Calculate new totals and level
+    const oldLevel = ProgressionSystem.getLevelFromXP(player.xp);
+    const totalXPEarned = matchXP + achievementXP;
+    const newTotalXP = player.xp + totalXPEarned;
+    const newLevelInfo = ProgressionSystem.getLevelFromXP(newTotalXP);
+    const newAbilities = ProgressionSystem.getUnlockedAbilities(newLevelInfo.level);
+
     // Update player's detailed stats in DB
     this.playerRepo.updateStats(auth.playerId, {
-      xp: player.xp + bonusXP,
-      level: player.level,
+      xp: newTotalXP,
+      level: newLevelInfo.level,
       rating: player.rating,
       wins: player.wins + (matchStats.won ? 1 : 0),
       losses: player.losses + (matchStats.won ? 0 : 1),
       kills: player.kills + (matchStats.kills || 0),
       deaths: player.deaths + (matchStats.deaths || 0),
-      unlockedAbilities: JSON.parse(player.unlocked_abilities || '["dash"]'),
+      unlockedAbilities: newAbilities,
       detailedStats: updatedStats
     });
+
+    // Send match results to client
+    if (socket) {
+      socket.emit(MessageTypes.MATCH_RESULTS, {
+        xpEarned: matchXP,
+        achievementXP,
+        oldLevel: oldLevel.level,
+        newLevel: newLevelInfo.level,
+        currentLevelXP: newLevelInfo.currentXP,
+        xpForNextLevel: newLevelInfo.xpForNextLevel,
+        newAchievements: newAchievementDetails
+      });
+    }
   }
 }

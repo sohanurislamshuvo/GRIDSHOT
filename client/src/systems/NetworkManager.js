@@ -137,6 +137,10 @@ export class NetworkManager {
     this.socket.on(MessageTypes.ACHIEVEMENT_UNLOCKED, (data) => {
       if (this.onAchievementUnlocked) this.onAchievementUnlocked(data);
     });
+
+    this.socket.on(MessageTypes.MATCH_RESULTS, (data) => {
+      if (this.onMatchResults) this.onMatchResults(data);
+    });
   }
 
   authenticate(playerId, username) {

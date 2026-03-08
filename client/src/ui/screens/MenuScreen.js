@@ -1,4 +1,5 @@
 import { ProfilePanel } from './ProfilePanel.js';
+import { LeaderboardScreen } from './LeaderboardScreen.js';
 
 export class MenuScreen {
   constructor(root, game) {
@@ -21,6 +22,7 @@ export class MenuScreen {
       <div class="menu-buttons">
         <button class="menu-btn" data-mode="solo">SOLO MISSION</button>
         <button class="menu-btn" data-mode="battle_royale">BATTLE ROYALE (Online)</button>
+        <button class="menu-btn" data-mode="custom">CUSTOM MATCH (Online)</button>
         <button class="menu-btn" data-mode="ctf">CAPTURE THE FLAG (Online)</button>
         <button class="menu-btn" data-mode="koth">KING OF THE HILL (Online)</button>
         <button class="menu-btn" data-mode="duel">1v1 DUEL (Online)</button>
@@ -29,6 +31,7 @@ export class MenuScreen {
       </div>
       <div class="menu-bottom-bar">
         <button class="menu-profile-btn">PROFILE</button>
+        <button class="menu-leaderboard-btn">LEADERBOARD</button>
       </div>
       <div class="menu-controls"></div>
     `;
@@ -36,6 +39,7 @@ export class MenuScreen {
 
     // Profile panel
     this.profilePanel = new ProfilePanel(root, game);
+    this.leaderboard = new LeaderboardScreen(root, game);
 
     // Map selection
     this.el.querySelectorAll('.map-btn').forEach(btn => {
@@ -57,6 +61,11 @@ export class MenuScreen {
     // Profile button
     this.el.querySelector('.menu-profile-btn').addEventListener('click', () => {
       this.profilePanel.show();
+    });
+
+    // Leaderboard button
+    this.el.querySelector('.menu-leaderboard-btn').addEventListener('click', () => {
+      this.leaderboard.show();
     });
 
     // Controls hint

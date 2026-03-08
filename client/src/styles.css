@@ -312,13 +312,108 @@
 }
 
 .gameover-stats {
-  font-size: 18px;
+  font-size: 16px;
   color: #ccc;
   font-family: 'Courier New', monospace;
-  margin-bottom: 30px;
+  margin-bottom: 16px;
   text-align: center;
-  line-height: 1.6;
 }
+
+.go-stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 4px 0;
+}
+.go-stat-label { color: #888; }
+.go-stat-value { color: #fff; font-weight: bold; }
+
+.gameover-xp {
+  text-align: center;
+  margin-bottom: 12px;
+  font-family: 'Courier New', monospace;
+}
+.go-xp-title {
+  font-size: 28px;
+  color: #ffaa00;
+  font-weight: bold;
+  text-shadow: 0 0 20px rgba(255, 170, 0, 0.5);
+}
+.go-xp-detail {
+  font-size: 13px;
+  color: #aa8844;
+}
+
+.gameover-level {
+  text-align: center;
+  margin-bottom: 16px;
+  font-family: 'Courier New', monospace;
+  width: 300px;
+}
+.go-levelup {
+  font-size: 24px;
+  color: #44ff44;
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-shadow: 0 0 20px rgba(68, 255, 68, 0.5);
+  animation: levelPulse 0.6s ease-in-out 3;
+}
+@keyframes levelPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+.go-level-label {
+  font-size: 14px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+.go-level-bar-bg {
+  width: 100%;
+  height: 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.go-level-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4488ff, #44ccff);
+  border-radius: 6px;
+  transition: width 1s ease-out;
+}
+.go-level-xp {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.gameover-achievements {
+  text-align: center;
+  margin-bottom: 16px;
+  font-family: 'Courier New', monospace;
+}
+.go-ach-title {
+  font-size: 14px;
+  color: #ffaa00;
+  margin-bottom: 8px;
+}
+.go-ach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+.go-ach-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  border-radius: 4px;
+  padding: 4px 12px;
+}
+.go-ach-icon { font-size: 18px; }
+.go-ach-name { color: #fff; font-size: 13px; }
+.go-ach-xp { color: #ffaa00; font-size: 12px; }
 
 .gameover-btn {
   margin-top: 20px;
@@ -969,7 +1064,7 @@
   display: flex;
   gap: 12px;
 }
-.menu-profile-btn {
+.menu-profile-btn, .menu-leaderboard-btn {
   font-size: 14px;
   font-family: 'Courier New', monospace;
   color: #aaa;
@@ -981,7 +1076,7 @@
   letter-spacing: 2px;
   transition: all 0.2s;
 }
-.menu-profile-btn:hover {
+.menu-profile-btn:hover, .menu-leaderboard-btn:hover {
   color: #fff;
   border-color: rgba(68, 136, 255, 0.6);
   box-shadow: 0 0 12px rgba(68, 136, 255, 0.2);
@@ -1155,6 +1250,164 @@
   letter-spacing: 2px;
 }
 .achievement-card.unlocked .achievement-status { color: #44ff88; }
+
+.achievement-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.achievement-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4488ff, #44ccff);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.achievement-progress-text {
+  font-size: 10px;
+  color: #556;
+  font-family: 'Courier New', monospace;
+  margin-top: 2px;
+}
+
+/* ─── STATS TAB ──────────────────────────────────────────────── */
+.stats-section {
+  margin-bottom: 20px;
+}
+.stats-overview {
+  padding: 12px 0;
+}
+.stats-level-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.stats-level {
+  font-size: 20px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+}
+.stats-rank {
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+.stats-xp-bar-bg {
+  width: 100%;
+  height: 10px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.stats-xp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4488ff, #44ccff);
+  border-radius: 5px;
+}
+.stats-xp-text {
+  font-size: 11px;
+  color: #556;
+  font-family: 'Courier New', monospace;
+  margin-top: 4px;
+  text-align: right;
+}
+.stats-rating {
+  font-size: 14px;
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  margin-top: 8px;
+}
+.stats-rating strong { color: #fff; }
+.stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+.stat-label { color: #888; }
+.stat-value { color: #ddd; font-weight: bold; }
+
+/* ─── LEADERBOARD ────────────────────────────────────────────── */
+.leaderboard-panel {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(5, 5, 15, 0.96);
+  z-index: 60;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+.leaderboard-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+  width: 100%;
+  max-width: 600px;
+  justify-content: space-between;
+}
+.leaderboard-title {
+  font-size: 28px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 4px;
+}
+.leaderboard-content {
+  width: 100%;
+  max-width: 600px;
+}
+.lb-loading {
+  text-align: center;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  padding: 40px;
+}
+.lb-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lb-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(20, 20, 40, 0.4);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #ccc;
+}
+.lb-row.lb-header {
+  color: #666;
+  font-size: 11px;
+  letter-spacing: 1px;
+  background: none;
+}
+.lb-row.lb-me {
+  border: 1px solid rgba(68, 136, 255, 0.4);
+  background: rgba(68, 136, 255, 0.08);
+}
+.lb-rank { width: 40px; text-align: center; }
+.lb-name { flex: 1; }
+.lb-lvl { width: 40px; text-align: center; }
+.lb-rating { width: 60px; text-align: center; color: #fff; font-weight: bold; }
+.lb-tier { width: 70px; text-align: center; font-weight: bold; }
+.lb-wl { width: 60px; text-align: center; }
 
 /* ─── FRIENDS ──────────────────────────────────────────────── */
 .friends-add {

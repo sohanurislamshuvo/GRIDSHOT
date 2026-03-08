@@ -47,8 +47,9 @@ export const MessageTypes = {
   DESTRUCTIBLE_DESTROYED: 'destructible_destroyed',
   DESTRUCTIBLE_RESPAWNED: 'destructible_respawned',
 
-  // Achievements
+  // Achievements / Progression
   ACHIEVEMENT_UNLOCKED: 'achievement_unlocked',
+  MATCH_RESULTS: 'match_results',
 
   // Cosmetics
   EQUIP_SKIN: 'equip_skin',

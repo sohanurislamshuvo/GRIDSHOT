@@ -162,13 +162,16 @@ export function createRoutes(playerRepo) {
       username: player.username,
       level: levelInfo.level,
       xp: player.xp,
+      currentLevelXP: levelInfo.currentXP,
+      xpForNextLevel: levelInfo.xpForNextLevel,
       rating: player.rating,
       rank: ProgressionSystem.getRankTier(player.rating),
       wins: player.wins,
       losses: player.losses,
       kills: player.kills,
       deaths: player.deaths,
-      kd: player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : player.kills
+      kd: player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : player.kills,
+      detailedStats: JSON.parse(player.stats_json || '{}')
     });
   });
 

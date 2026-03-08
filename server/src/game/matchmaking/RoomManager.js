@@ -41,6 +41,7 @@ export class RoomManager {
       mode,
       players: room.getLobbyPlayerList(),
       maxPlayers: room.settings.maxPlayers,
+      minPlayers: room.settings.minPlayers,
       isHost: true
     });
   }
@@ -76,13 +77,15 @@ export class RoomManager {
       mode: room.mode,
       players: room.getLobbyPlayerList(),
       maxPlayers: room.settings.maxPlayers,
+      minPlayers: room.settings.minPlayers,
       isHost: false
     });
 
     // Notify all in room about updated player list
     this.io.to(room.id).emit(MessageTypes.ROOM_UPDATE, {
       players: room.getLobbyPlayerList(),
-      maxPlayers: room.settings.maxPlayers
+      maxPlayers: room.settings.maxPlayers,
+      minPlayers: room.settings.minPlayers
     });
   }
 
@@ -97,9 +100,9 @@ export class RoomManager {
 
     if (room.lobbyState !== 'waiting') return;
 
-    const required = room.settings.maxPlayers;
+    const required = room.settings.minPlayers || room.settings.maxPlayers;
     if (room.players.size < required) {
-      socket.emit(MessageTypes.JOIN_FAILED, { reason: `Need ${required} players to start. Currently ${room.players.size}/${required}.` });
+      socket.emit(MessageTypes.JOIN_FAILED, { reason: `Need at least ${required} players to start. Currently ${room.players.size}.` });
       return;
     }
 
@@ -133,7 +136,8 @@ export class RoomManager {
         // Notify remaining players
         this.io.to(room.id).emit(MessageTypes.ROOM_UPDATE, {
           players: room.getLobbyPlayerList(),
-          maxPlayers: room.settings.maxPlayers
+          maxPlayers: room.settings.maxPlayers,
+          minPlayers: room.settings.minPlayers
         });
       }
 

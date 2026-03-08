@@ -477,13 +477,13 @@ export class Game {
 
   _setupLobbyCallbacks() {
     this.network.onRoomCreated = (data) => {
-      this.ui.lobby.showLobby(data.code, data.players, data.maxPlayers, data.isHost);
+      this.ui.lobby.showLobby(data.code, data.players, data.maxPlayers, data.isHost, data.minPlayers);
     };
     this.network.onRoomJoined = (data) => {
-      this.ui.lobby.showLobby(data.code, data.players, data.maxPlayers, data.isHost);
+      this.ui.lobby.showLobby(data.code, data.players, data.maxPlayers, data.isHost, data.minPlayers);
     };
     this.network.onRoomUpdate = (data) => {
-      this.ui.lobby.updatePlayers(data.players, data.maxPlayers);
+      this.ui.lobby.updatePlayers(data.players, data.maxPlayers, data.minPlayers);
     };
     this.network.onJoinFailed = (data) => {
       this.ui.lobby.showError(data.reason);
@@ -532,6 +532,12 @@ export class Game {
       if (!this.unlockedAchievements.includes(data.id)) {
         this.unlockedAchievements.push(data.id);
       }
+    };
+    this.network.onMatchResults = (data) => {
+      if (data.newLevel > data.oldLevel) {
+        this.playerLevel = data.newLevel;
+      }
+      this.ui.gameOver.showMatchResults(data);
     };
 
     // Authenticate socket if logged in

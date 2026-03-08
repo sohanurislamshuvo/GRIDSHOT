@@ -20,6 +20,7 @@ import { KOTHMode } from './modes/KOTHMode.js';
 import { SoloMode } from './modes/SoloMode.js';
 import { DuelMode } from './modes/DuelMode.js';
 import { TeamMode } from './modes/TeamMode.js';
+import { CustomMode } from './modes/CustomMode.js';
 
 let roomIdCounter = 1;
 
@@ -71,21 +72,23 @@ export class Room {
   getSettings(mode) {
     switch (mode) {
       case 'solo':
-        return { maxPlayers: 1, bots: 5, killLimit: 0, timeLimit: 0, teams: false, respawn: true };
+        return { maxPlayers: 1, minPlayers: 1, bots: 5, killLimit: 0, timeLimit: 0, teams: false, respawn: true };
       case 'duel':
-        return { maxPlayers: 2, bots: 0, killLimit: 10, timeLimit: 300000, teams: false, respawn: true };
+        return { maxPlayers: 2, minPlayers: 2, bots: 0, killLimit: 10, timeLimit: 300000, teams: false, respawn: true };
       case 'team2v2':
-        return { maxPlayers: 4, bots: 0, killLimit: 25, timeLimit: 600000, teams: true, respawn: true };
+        return { maxPlayers: 4, minPlayers: 4, bots: 0, killLimit: 25, timeLimit: 600000, teams: true, respawn: true };
       case 'team3v3':
-        return { maxPlayers: 6, bots: 0, killLimit: 25, timeLimit: 600000, teams: true, respawn: true };
+        return { maxPlayers: 6, minPlayers: 6, bots: 0, killLimit: 25, timeLimit: 600000, teams: true, respawn: true };
       case 'battle_royale':
-        return { maxPlayers: 12, bots: 0, killLimit: 0, timeLimit: 600000, teams: false, respawn: false };
+        return { maxPlayers: 12, minPlayers: 12, bots: 0, killLimit: 0, timeLimit: 600000, teams: false, respawn: false };
       case 'ctf':
-        return { maxPlayers: 8, bots: 0, killLimit: 0, timeLimit: 600000, teams: true, respawn: true };
+        return { maxPlayers: 8, minPlayers: 8, bots: 0, killLimit: 0, timeLimit: 600000, teams: true, respawn: true };
       case 'koth':
-        return { maxPlayers: 6, bots: 0, killLimit: 0, timeLimit: 600000, teams: true, respawn: true };
+        return { maxPlayers: 6, minPlayers: 6, bots: 0, killLimit: 0, timeLimit: 600000, teams: true, respawn: true };
+      case 'custom':
+        return { maxPlayers: 100, minPlayers: 2, bots: 0, killLimit: 50, timeLimit: 900000, teams: false, respawn: true };
       default:
-        return { maxPlayers: 2, bots: 0, killLimit: 10, timeLimit: 300000, teams: false, respawn: true };
+        return { maxPlayers: 2, minPlayers: 2, bots: 0, killLimit: 10, timeLimit: 300000, teams: false, respawn: true };
     }
   }
 
@@ -98,6 +101,7 @@ export class Room {
       case 'battle_royale': return new BattleRoyaleMode(this);
       case 'ctf': return new CTFMode(this);
       case 'koth': return new KOTHMode(this);
+      case 'custom': return new CustomMode(this);
       default: return null;
     }
   }
