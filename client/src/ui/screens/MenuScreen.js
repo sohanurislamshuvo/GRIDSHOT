@@ -81,9 +81,10 @@ export class MenuScreen {
 
     if (token && username) {
       this.accountEl.innerHTML = `
-        <span class="account-user">Logged in as <strong>${username}</strong></span>
+        <span class="account-user">Logged in as <strong class="account-username"></strong></span>
         <button class="account-logout-btn">LOGOUT</button>
       `;
+      this.accountEl.querySelector('.account-username').textContent = username;
       this.accountEl.querySelector('.account-logout-btn').addEventListener('click', () => {
         localStorage.removeItem('sa_token');
         localStorage.removeItem('sa_username');

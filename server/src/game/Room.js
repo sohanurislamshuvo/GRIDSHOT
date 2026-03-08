@@ -17,6 +17,9 @@ import { BotAI } from './ai/BotAI.js';
 import { BattleRoyaleMode } from './modes/BattleRoyaleMode.js';
 import { CTFMode } from './modes/CTFMode.js';
 import { KOTHMode } from './modes/KOTHMode.js';
+import { SoloMode } from './modes/SoloMode.js';
+import { DuelMode } from './modes/DuelMode.js';
+import { TeamMode } from './modes/TeamMode.js';
 
 let roomIdCounter = 1;
 
@@ -88,6 +91,10 @@ export class Room {
 
   _createModeHandler(mode) {
     switch (mode) {
+      case 'solo': return new SoloMode(this);
+      case 'duel': return new DuelMode(this);
+      case 'team2v2': return new TeamMode(this, 2);
+      case 'team3v3': return new TeamMode(this, 3);
       case 'battle_royale': return new BattleRoyaleMode(this);
       case 'ctf': return new CTFMode(this);
       case 'koth': return new KOTHMode(this);
@@ -156,6 +163,8 @@ export class Room {
   addPlayer(socket) {
     const spawn = this.getSpawnPoint(this.players.size);
     const player = new PlayerEntity(spawn.x, spawn.y, socket.id);
+    player.mapWidth = this.mapConfig.width;
+    player.mapHeight = this.mapConfig.height;
 
     // Assign team if team mode
     if (this.settings.teams) {
@@ -241,6 +250,8 @@ export class Room {
       const x = randomInRange(margin, mc.width - margin);
       const y = randomInRange(margin, mc.height - margin);
       const bot = new BotEntity(x, y, BotType.GRUNT);
+      bot.mapWidth = mc.width;
+      bot.mapHeight = mc.height;
 
       this.bots.set(bot.id, bot);
       this.botAIs.set(bot.id, new BotAI(bot, this));
@@ -483,6 +494,9 @@ export class Room {
     // Combat: check hits (now uses spatial hash for O(1) lookups)
     this.combatSystem.update(now);
 
+    // Ability effects: expire shields, heals, cooldowns
+    this.abilitySystem.update(now);
+
     // Check pickup collisions and respawns
     this.checkPickupCollisions(now);
 
@@ -514,9 +528,11 @@ export class Room {
 
     // Delegate to mode handler if present
     if (this.modeHandler) {
-      const winner = this.modeHandler.checkWinCondition();
-      if (winner) {
-        this.endMatch(winner);
+      const result = this.modeHandler.checkWinCondition();
+      if (result) {
+        // Mode handlers may return a string or { winner: string }
+        const winnerId = typeof result === 'object' ? result.winner : result;
+        this.endMatch(winnerId);
         return;
       }
     }

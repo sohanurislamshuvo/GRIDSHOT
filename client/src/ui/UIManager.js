@@ -15,9 +15,6 @@ export class UIManager {
       || (navigator.maxTouchPoints > 0)
       || (window.innerWidth < 1024 && 'orientation' in window);
 
-    // Load CSS
-    this._loadStyles();
-
     // Create UI layers
     this.menu = new MenuScreen(root, game);
     this.lobby = new LobbyScreen(root, game);
@@ -29,15 +26,6 @@ export class UIManager {
     this.moveJoystick = null;
     this.aimJoystick = null;
     this.abilityButtons = null;
-  }
-
-  _loadStyles() {
-    if (document.getElementById('game-styles')) return;
-    const link = document.createElement('link');
-    link.id = 'game-styles';
-    link.rel = 'stylesheet';
-    link.href = '/src/styles.css';
-    document.head.appendChild(link);
   }
 
   showLoading() {

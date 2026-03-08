@@ -40,9 +40,10 @@ export class DuelMode extends GameMode {
   }
 
   getSpawnPoint(playerIndex) {
+    const mc = this.room.mapConfig;
     const points = [
       { x: 200, y: 200 },
-      { x: GameConfig.WORLD_WIDTH - 200, y: GameConfig.WORLD_HEIGHT - 200 }
+      { x: mc.width - 200, y: mc.height - 200 }
     ];
     return points[playerIndex % 2];
   }

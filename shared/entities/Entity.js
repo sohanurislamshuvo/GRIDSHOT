@@ -13,15 +13,18 @@ export class Entity {
     this.rotation = 0;
     this.radius = 16;
     this.active = true;
+    // Map bounds - defaults from GameConfig, override per-entity for non-standard maps
+    this.mapWidth = GameConfig.WORLD_WIDTH;
+    this.mapHeight = GameConfig.WORLD_HEIGHT;
   }
 
   update(dt) {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Clamp to world bounds
-    this.x = clamp(this.x, this.radius, GameConfig.WORLD_WIDTH - this.radius);
-    this.y = clamp(this.y, this.radius, GameConfig.WORLD_HEIGHT - this.radius);
+    // Clamp to world bounds (uses per-entity map dimensions)
+    this.x = clamp(this.x, this.radius, this.mapWidth - this.radius);
+    this.y = clamp(this.y, this.radius, this.mapHeight - this.radius);
   }
 
   distanceTo(other) {

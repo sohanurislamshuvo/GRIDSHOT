@@ -22,6 +22,14 @@ export class TimeOfDaySystem {
     this.time = 0;        // 0 to 1 (full cycle)
     this.cycleDuration = CYCLE_DURATION;
     this._tmpColor = new THREE.Color();
+
+    // Pre-allocated reusable Color objects to avoid GC pressure in update()
+    this._ambientNight = new THREE.Color(0x1a2244);
+    this._ambientDay = new THREE.Color(0x445566);
+    this._hemiNight = new THREE.Color(0x223355);
+    this._hemiDay = new THREE.Color(0x6688aa);
+    this._hemiGroundNight = new THREE.Color(0x111118);
+    this._hemiGroundDay = new THREE.Color(0x222225);
   }
 
   update(dt) {
@@ -66,8 +74,8 @@ export class TimeOfDaySystem {
     if (this.ambient) {
       this.ambient.intensity = 0.3 + dayFactor * 0.5;
       this.ambient.color.lerpColors(
-        new THREE.Color(0x1a2244),
-        new THREE.Color(0x445566),
+        this._ambientNight,
+        this._ambientDay,
         dayFactor
       );
     }
@@ -76,13 +84,13 @@ export class TimeOfDaySystem {
     if (this.hemi) {
       this.hemi.intensity = 0.2 + dayFactor * 0.4;
       this.hemi.color.lerpColors(
-        new THREE.Color(0x223355),
-        new THREE.Color(0x6688aa),
+        this._hemiNight,
+        this._hemiDay,
         dayFactor
       );
       this.hemi.groundColor.lerpColors(
-        new THREE.Color(0x111118),
-        new THREE.Color(0x222225),
+        this._hemiGroundNight,
+        this._hemiGroundDay,
         dayFactor
       );
     }

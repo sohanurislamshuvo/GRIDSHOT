@@ -32,9 +32,10 @@ export class SoloMode extends GameMode {
   }
 
   getSpawnPoint(playerIndex) {
+    const mc = this.room.mapConfig;
     return {
-      x: GameConfig.WORLD_WIDTH / 2,
-      y: GameConfig.WORLD_HEIGHT / 2
+      x: mc.width / 2,
+      y: mc.height / 2
     };
   }
 }

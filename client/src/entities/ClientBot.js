@@ -82,8 +82,13 @@ export class ClientBot {
     this.scene.add(this._muzzleLight);
     this._muzzleLightTimer = null;
 
-    // Walk animation
+    // Walk animation - use accumulated delta time instead of Date.now()
     this._walkPhase = 0;
+    this._walkTime = 0;
+    // Store base Y positions to avoid additive drift
+    const children = this.group.children;
+    this._legBaseY0 = children[0] ? children[0].position.y : 0;
+    this._legBaseY1 = children[1] ? children[1].position.y : 0;
 
     this._pickWaypoint();
   }
@@ -154,14 +159,19 @@ export class ClientBot {
     this.x += vx * dt;
     this.y += vy * dt;
 
-    // Walk animation
+    // Walk animation using accumulated delta time (avoids drift)
     const moving = vx !== 0 || vy !== 0;
     if (moving) {
-      this._walkPhase += dt * 8;
-      const swing = Math.sin(this._walkPhase) * 0.25;
+      this._walkTime += dt * 8;
+      const swing = Math.sin(this._walkTime) * 0.25;
       const children = this.group.children;
-      if (children[0]) children[0].position.y += swing * 1.5;
-      if (children[1]) children[1].position.y -= swing * 1.5;
+      if (children[0]) children[0].position.y = this._legBaseY0 + swing * 1.5;
+      if (children[1]) children[1].position.y = this._legBaseY1 - swing * 1.5;
+    } else {
+      // Reset legs to base position when not moving
+      const children = this.group.children;
+      if (children[0]) children[0].position.y = this._legBaseY0;
+      if (children[1]) children[1].position.y = this._legBaseY1;
     }
 
     this.syncModel();

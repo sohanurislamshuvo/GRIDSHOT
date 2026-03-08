@@ -734,7 +734,7 @@
 /* ─── MINIMAP ────────────────────────────────────────────────── */
 .hud-minimap {
   position: absolute;
-  bottom: 100px;
+  top: 60px;
   right: 20px;
 }
 

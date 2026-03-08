@@ -46,21 +46,22 @@ export class TeamMode extends GameMode {
   }
 
   getSpawnPoint(playerIndex) {
+    const mc = this.room.mapConfig;
     const isRed = playerIndex % 2 === 0;
     const teamIndex = Math.floor(playerIndex / 2);
 
     if (isRed) {
       const redSpawns = [
         { x: 200, y: 200 },
-        { x: 200, y: GameConfig.WORLD_HEIGHT / 2 },
-        { x: 200, y: GameConfig.WORLD_HEIGHT - 200 }
+        { x: 200, y: mc.height / 2 },
+        { x: 200, y: mc.height - 200 }
       ];
       return redSpawns[teamIndex % redSpawns.length];
     } else {
       const blueSpawns = [
-        { x: GameConfig.WORLD_WIDTH - 200, y: 200 },
-        { x: GameConfig.WORLD_WIDTH - 200, y: GameConfig.WORLD_HEIGHT / 2 },
-        { x: GameConfig.WORLD_WIDTH - 200, y: GameConfig.WORLD_HEIGHT - 200 }
+        { x: mc.width - 200, y: 200 },
+        { x: mc.width - 200, y: mc.height / 2 },
+        { x: mc.width - 200, y: mc.height - 200 }
       ];
       return blueSpawns[teamIndex % blueSpawns.length];
     }

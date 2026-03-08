@@ -1,6 +1,10 @@
 import { AchievementConfig } from 'shadow-arena-shared/config/AchievementConfig.js';
 import { SkinConfig, TrailConfig } from 'shadow-arena-shared/config/CosmeticConfig.js';
 
+function escapeHTML(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 export class ProfilePanel {
   constructor(root, game) {
     this.game = game;
@@ -200,8 +204,8 @@ export class ProfilePanel {
         let phtml = '<h4 class="section-title">PENDING REQUESTS</h4>';
         for (const req of data.pending) {
           phtml += `<div class="friend-entry pending">
-            <span class="friend-name">${req.username} (Lv ${req.level})</span>
-            <button class="friend-accept-btn" data-id="${req.player_id}">ACCEPT</button>
+            <span class="friend-name">${escapeHTML(req.username)} (Lv ${req.level})</span>
+            <button class="friend-accept-btn" data-id="${escapeHTML(req.player_id)}">ACCEPT</button>
           </div>`;
         }
         pendingEl.innerHTML = phtml;
@@ -223,7 +227,7 @@ export class ProfilePanel {
         let fhtml = '<h4 class="section-title">FRIENDS</h4>';
         for (const f of data.friends) {
           fhtml += `<div class="friend-entry">
-            <span class="friend-name">${f.username}</span>
+            <span class="friend-name">${escapeHTML(f.username)}</span>
             <span class="friend-level">Lv ${f.level} | ${f.rating} ELO</span>
           </div>`;
         }

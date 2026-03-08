@@ -127,6 +127,8 @@ export class HUD {
     this._wallGrid = null;
     this._wallGridCache = null; // Cached offscreen canvas for wall grid
     this._zoneData = null; // { x, y, radius }
+    this._mapWidth = 2000;  // Map dimensions for minimap scaling
+    this._mapHeight = 2000;
 
     // Mobile labels
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -138,6 +140,11 @@ export class HUD {
 
     // Previous health for damage flash
     this._prevHealth = 100;
+  }
+
+  setMapSize(width, height) {
+    this._mapWidth = width;
+    this._mapHeight = height;
   }
 
   setWallGrid(grid) {
@@ -311,7 +318,16 @@ export class HUD {
   addKillFeedEntry(killer, victim, isMyKill) {
     const entry = document.createElement('div');
     entry.className = 'kill-feed-entry' + (isMyKill ? ' my-kill' : '');
-    entry.innerHTML = `<span class="kf-killer">${killer}</span> <span class="kf-arrow">\u25B8</span> <span class="kf-victim">${victim}</span>`;
+    const kSpan = document.createElement('span');
+    kSpan.className = 'kf-killer';
+    kSpan.textContent = killer;
+    const arrow = document.createElement('span');
+    arrow.className = 'kf-arrow';
+    arrow.textContent = '\u25B8';
+    const vSpan = document.createElement('span');
+    vSpan.className = 'kf-victim';
+    vSpan.textContent = victim;
+    entry.append(kSpan, ' ', arrow, ' ', vSpan);
     this._killFeedEl.appendChild(entry);
 
     // Trigger slide-in
@@ -427,8 +443,8 @@ export class HUD {
     const ctx = this._minimapCtx;
     const w = 200;
     const h = 200;
-    const worldW = 2000;
-    const worldH = 2000;
+    const worldW = this._mapWidth;
+    const worldH = this._mapHeight;
 
     ctx.clearRect(0, 0, w, h);
 

@@ -64,19 +64,31 @@ export class AbilitySystem {
   executeDash(player, socketId) {
     const angle = player.rotation;
     const dashDist = ABILITY_DEFS.dash.distance;
+    const mc = this.room.mapConfig;
 
-    let targetX = player.x + Math.cos(angle) * dashDist;
-    let targetY = player.y + Math.sin(angle) * dashDist;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
 
-    // Clamp to world
-    targetX = Math.max(20, Math.min(GameConfig.WORLD_WIDTH - 20, targetX));
-    targetY = Math.max(20, Math.min(GameConfig.WORLD_HEIGHT - 20, targetY));
+    // Step-check along dash path to stop at first wall
+    const stepSize = 16; // Check every half-tile
+    const steps = Math.ceil(dashDist / stepSize);
+    let finalX = player.x;
+    let finalY = player.y;
 
-    // Check wall collision along path (simplified: check target)
-    if (this.room.isPositionWalkable(targetX, targetY)) {
-      player.x = targetX;
-      player.y = targetY;
+    for (let i = 1; i <= steps; i++) {
+      const dist = Math.min(i * stepSize, dashDist);
+      const testX = Math.max(20, Math.min(mc.width - 20, player.x + dx * dist));
+      const testY = Math.max(20, Math.min(mc.height - 20, player.y + dy * dist));
+
+      if (!this.room.isPositionWalkable(testX, testY)) {
+        break; // Stop at last valid position
+      }
+      finalX = testX;
+      finalY = testY;
     }
+
+    player.x = finalX;
+    player.y = finalY;
 
     // Brief invulnerability
     player.invulnerable = true;

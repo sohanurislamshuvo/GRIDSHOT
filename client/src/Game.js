@@ -164,6 +164,7 @@ export class Game {
       this.ui.updateLoadingProgress(step, progress);
     });
     this.collision.setWallGrid(this.world.wallGrid, this.mapConfig.tileSize);
+    this.ui.hud.setMapSize(this.mapConfig.width, this.mapConfig.height);
     this.ui.hud.setWallGrid(this.world.wallGrid);
 
     // Projectile pool (InstancedMesh for all bullets)
@@ -858,8 +859,16 @@ export class Game {
 
   handleMatchEnd(data) {
     const isWinner = data.winner === this.network?.playerId || data.winner === this.player?.team;
-    this.ui.showMatchResult(isWinner ? 'VICTORY!' : 'DEFEAT', isWinner);
-    setTimeout(() => this.returnToMenu(), 3000);
+    const title = isWinner ? 'VICTORY!' : 'DEFEAT';
+
+    // Show GameOverScreen with stats
+    this.state = State.GAME_OVER;
+    this.loop.stop();
+    this.ui.hud.hide();
+    this.ui.gameOver.show(title, isWinner, {
+      kills: this.kills,
+      deaths: this.deaths
+    });
   }
 
   shakeCamera() {
@@ -947,10 +956,24 @@ export class Game {
   activateDash() {
     if (!this.player.alive) return;
     const angle = this.player.rotation;
-    const targetX = Math.max(20, Math.min(this.mapConfig.width - 20,
-      this.player.x + Math.cos(angle) * 200));
-    const targetY = Math.max(20, Math.min(this.mapConfig.height - 20,
-      this.player.y + Math.sin(angle) * 200));
+    const dashDist = 200;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    // Step-check along dash path to stop at first wall
+    const stepSize = 16;
+    const steps = Math.ceil(dashDist / stepSize);
+    let targetX = this.player.x;
+    let targetY = this.player.y;
+
+    for (let i = 1; i <= steps; i++) {
+      const dist = Math.min(i * stepSize, dashDist);
+      const testX = Math.max(20, Math.min(this.mapConfig.width - 20, this.player.x + dx * dist));
+      const testY = Math.max(20, Math.min(this.mapConfig.height - 20, this.player.y + dy * dist));
+      if (this.collision && this.collision.isInWall(testX, testY)) break;
+      targetX = testX;
+      targetY = testY;
+    }
 
     // Animate dash
     const startX = this.player.x;
@@ -996,6 +1019,12 @@ export class Game {
     if (this._healInterval) clearInterval(this._healInterval);
     this._healInterval = setInterval(() => {
       tickCount++;
+      if (!this.player || !this.player.alive) {
+        clearInterval(this._healInterval);
+        this._healInterval = null;
+        if (this.player) this.player.setHealTint(false);
+        return;
+      }
       this.player.health = Math.min(this.player.maxHealth, this.player.health + healPerTick);
       if (tickCount >= ticks) {
         clearInterval(this._healInterval);

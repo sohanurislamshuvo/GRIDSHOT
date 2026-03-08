@@ -7,6 +7,29 @@ import { SkinConfig, TrailConfig, getUnlockedSkins, getUnlockedTrails } from 'sh
 
 const JWT_SECRET = process.env.JWT_SECRET || 'shadow-arena-dev-secret-change-in-production';
 
+// Simple in-memory rate limiter for auth endpoints
+const authAttempts = new Map(); // ip -> { count, resetAt }
+function authRateLimit(req, res, next) {
+  const ip = req.ip;
+  const now = Date.now();
+  const entry = authAttempts.get(ip);
+  if (entry && now < entry.resetAt) {
+    if (entry.count >= 10) {
+      return res.status(429).json({ error: 'Too many attempts. Try again later.' });
+    }
+    entry.count++;
+  } else {
+    authAttempts.set(ip, { count: 1, resetAt: now + 60000 }); // 10 per minute
+  }
+  // Cleanup old entries periodically
+  if (authAttempts.size > 1000) {
+    for (const [key, val] of authAttempts) {
+      if (now > val.resetAt) authAttempts.delete(key);
+    }
+  }
+  next();
+}
+
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -25,7 +48,7 @@ export function createRoutes(playerRepo) {
   const router = Router();
 
   // Register
-  router.post('/auth/register', async (req, res) => {
+  router.post('/auth/register', authRateLimit, async (req, res) => {
     try {
       const { username, password } = req.body;
 
@@ -72,7 +95,7 @@ export function createRoutes(playerRepo) {
   });
 
   // Login
-  router.post('/auth/login', async (req, res) => {
+  router.post('/auth/login', authRateLimit, async (req, res) => {
     try {
       const { username, password } = req.body;
 
