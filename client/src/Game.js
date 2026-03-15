@@ -441,6 +441,16 @@ export class Game {
       if (input.ability) {
         this.network.sendAbility(input.ability);
       }
+
+      // Immediate muzzle flash feedback for shooting
+      if (input.shoot) {
+        const angle = this.player.rotation;
+        const fx = this.player.x + Math.cos(angle) * 20;
+        const fy = this.player.y + Math.sin(angle) * 20;
+        this.particles.emit(fx, 10, fy, {
+          count: 3, speed: 80, color: 0xffffaa, lifetime: 0.1, size: 3
+        });
+      }
     }
 
     // Interpolate remote players

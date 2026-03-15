@@ -22,10 +22,9 @@ export class InputManager {
     this.cameraMode = 'tpp';
     this._pointerLocked = false;
 
-    // Mobile detection
+    // Mobile detection — require touch AND (small screen OR no mouse pointer)
     this.isMobile = ('ontouchstart' in window)
-      || (navigator.maxTouchPoints > 0)
-      || (window.innerWidth < 1024 && 'orientation' in window);
+      && (window.innerWidth < 1024 || !window.matchMedia('(pointer: fine)').matches);
 
     // Raycaster for mouse-to-world
     this._raycaster = new THREE.Raycaster();

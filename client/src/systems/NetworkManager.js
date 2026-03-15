@@ -10,6 +10,8 @@ export class NetworkManager {
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.serverSnapshots = [];
+    this._lastInputTime = 0;
+    this._lastShootState = false;
 
     // Lobby callbacks
     this.onRoomCreated = null;
@@ -172,8 +174,13 @@ export class NetworkManager {
 
   sendInput(input) {
     if (!this.connected) return;
+    const now = Date.now();
+    const shootChanged = !!input.shoot !== this._lastShootState;
+    this._lastShootState = !!input.shoot;
+    if (now - this._lastInputTime < 33 && !shootChanged) return;
+    this._lastInputTime = now;
     const seq = this.inputSequence++;
-    const inputPacket = { seq, ...input, timestamp: Date.now() };
+    const inputPacket = { seq, ...input, timestamp: now };
     this.pendingInputs.push(inputPacket);
     this.socket.emit(MessageTypes.PLAYER_INPUT, inputPacket);
     return seq;
