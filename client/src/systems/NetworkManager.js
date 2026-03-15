@@ -36,8 +36,9 @@ export class NetworkManager {
   }
 
   connect() {
-    const serverUrl = window.location.hostname === 'localhost'
-      ? 'http://localhost:3000'
+    const isDev = window.location.port === '5173';
+    const serverUrl = isDev
+      ? `http://${window.location.hostname}:3000`
       : window.location.origin;
 
     this.socket = io(serverUrl, {

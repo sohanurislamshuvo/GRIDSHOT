@@ -10,6 +10,7 @@ export class InputManager {
     this._mouseAngle = 0;
     this._mousePitch = 0;  // For FPP vertical look
     this._shooting = false;
+    this._spaceShoot = false;
     this._abilityQueue = null;
     this._justPressed = {};
     this._escape = false;
@@ -48,6 +49,10 @@ export class InputManager {
       if (['KeyQ', 'KeyE', 'KeyR', 'KeyF'].includes(e.code)) {
         this._justPressed[e.code] = true;
       }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this._spaceShoot = true;
+      }
       if (e.code === 'Escape') {
         this._escape = true;
         // Exit pointer lock on ESC
@@ -63,6 +68,7 @@ export class InputManager {
     };
     const onKeyUp = (e) => {
       this._keys[e.code] = false;
+      if (e.code === 'Space') this._spaceShoot = false;
     };
 
     document.addEventListener('keydown', onKeyDown);
@@ -186,7 +192,7 @@ export class InputManager {
       right: !!this._keys['KeyD'],
       angle: this._mouseAngle,
       pitch: this._mousePitch,
-      shoot: this._shooting,
+      shoot: this._shooting || this._spaceShoot,
       ability,
       escape,
       viewToggle,
