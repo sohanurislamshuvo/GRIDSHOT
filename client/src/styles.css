@@ -9,51 +9,58 @@
   justify-content: center;
   background: linear-gradient(180deg, rgba(5,5,15,0.97) 0%, rgba(10,10,20,0.97) 100%);
   z-index: 50;
+  gap: 4px;
+}
+
+.menu-header {
+  text-align: center;
+  margin-bottom: 4px;
 }
 
 .menu-title {
-  font-size: 48px;
+  font-size: 36px;
   color: #4488ff;
   font-family: 'Courier New', monospace;
   font-weight: bold;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   text-shadow: 0 0 20px rgba(68,136,255,0.5), 0 0 40px rgba(68,136,255,0.2);
 }
 
 .menu-subtitle {
-  font-size: 28px;
+  font-size: 14px;
   color: #aaa;
   font-family: 'Courier New', monospace;
   font-weight: normal;
-  margin-bottom: 20px;
+  margin-bottom: 0;
+  letter-spacing: 8px;
 }
 
 .menu-status {
-  font-size: 14px;
+  font-size: 13px;
   color: #ffaa00;
   font-family: 'Courier New', monospace;
-  margin-bottom: 20px;
-  min-height: 20px;
+  margin-bottom: 2px;
+  min-height: 16px;
 }
 
 .menu-map-select {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .map-label {
-  font-size: 14px;
+  font-size: 13px;
   color: #888;
   margin-right: 4px;
 }
 .map-btn {
-  font-size: 14px;
+  font-size: 13px;
   font-family: 'Courier New', monospace;
   color: #888;
   background: rgba(20, 20, 40, 0.6);
   border: 1px solid rgba(68, 136, 255, 0.2);
-  padding: 6px 14px;
+  padding: 5px 12px;
   cursor: pointer;
   border-radius: 3px;
   transition: all 0.2s;
@@ -69,24 +76,24 @@
 }
 
 .menu-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 440px;
 }
 
 .menu-btn {
-  font-size: 20px;
+  font-size: 14px;
   font-family: 'Courier New', monospace;
   color: #ccc;
   background: rgba(30, 30, 50, 0.8);
   border: 1px solid rgba(68, 136, 255, 0.3);
-  padding: 12px 30px;
+  padding: 10px 8px;
   cursor: pointer;
-  min-width: 260px;
   text-align: center;
   transition: all 0.2s;
   border-radius: 4px;
+  letter-spacing: 1px;
 }
 .menu-btn:hover {
   color: #fff;
@@ -96,9 +103,8 @@
 }
 
 .menu-controls {
-  position: absolute;
-  bottom: 40px;
-  font-size: 13px;
+  margin-top: 6px;
+  font-size: 11px;
   color: #555;
   font-family: 'Courier New', monospace;
   text-align: center;
@@ -926,9 +932,10 @@
 
 /* ─── MOBILE ─────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .menu-title { font-size: 36px; }
-  .menu-subtitle { font-size: 20px; }
-  .menu-btn { padding: 16px 36px; font-size: 18px; }
+  .menu-title { font-size: 28px; }
+  .menu-subtitle { font-size: 12px; letter-spacing: 4px; }
+  .menu-buttons { grid-template-columns: 1fr; width: 260px; }
+  .menu-btn { padding: 12px 8px; font-size: 14px; }
 
   .lobby-title { font-size: 32px; }
   .lobby-mode-label { font-size: 18px; }
@@ -1059,18 +1066,17 @@
 
 /* ─── MENU BOTTOM BAR ────────────────────────────────────────── */
 .menu-bottom-bar {
-  position: absolute;
-  bottom: 80px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  margin-top: 12px;
 }
 .menu-profile-btn, .menu-leaderboard-btn {
-  font-size: 14px;
+  font-size: 12px;
   font-family: 'Courier New', monospace;
   color: #aaa;
   background: rgba(30, 30, 50, 0.7);
   border: 1px solid rgba(68, 136, 255, 0.25);
-  padding: 10px 24px;
+  padding: 8px 20px;
   cursor: pointer;
   border-radius: 4px;
   letter-spacing: 2px;

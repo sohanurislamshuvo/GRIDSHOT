@@ -9,10 +9,12 @@ export class MenuScreen {
     this.el = document.createElement('div');
     this.el.className = 'menu-screen';
     this.el.innerHTML = `
-      <h1 class="menu-title">SHADOW ARENA</h1>
-      <h2 class="menu-subtitle">TACTICAL OPS</h2>
+      <div class="menu-header">
+        <h1 class="menu-title">SHADOW ARENA</h1>
+        <h2 class="menu-subtitle">TACTICAL OPS</h2>
+      </div>
       <div class="menu-status"></div>
-      <div class="menu-account"></div>
+      <!-- <div class="menu-account"></div> -->
       <div class="menu-map-select">
         <span class="map-label">MAP:</span>
         <button class="map-btn active" data-map="arena">Arena</button>
@@ -21,13 +23,13 @@ export class MenuScreen {
       </div>
       <div class="menu-buttons">
         <button class="menu-btn" data-mode="solo">SOLO MISSION</button>
-        <button class="menu-btn" data-mode="battle_royale">BATTLE ROYALE (Online)</button>
-        <button class="menu-btn" data-mode="custom">CUSTOM MATCH (Online)</button>
-        <button class="menu-btn" data-mode="ctf">CAPTURE THE FLAG (Online)</button>
-        <button class="menu-btn" data-mode="koth">KING OF THE HILL (Online)</button>
-        <button class="menu-btn" data-mode="duel">1v1 DUEL (Online)</button>
-        <button class="menu-btn" data-mode="team2v2">2v2 TEAM (Online)</button>
-        <button class="menu-btn" data-mode="team3v3">3v3 TEAM (Online)</button>
+        <button class="menu-btn" data-mode="custom">CUSTOM MATCH</button>
+        <button class="menu-btn" data-mode="battle_royale">BATTLE ROYALE</button>
+        <button class="menu-btn" data-mode="duel">1v1 DUEL</button>
+        <button class="menu-btn" data-mode="ctf">CAPTURE FLAG</button>
+        <button class="menu-btn" data-mode="team2v2">2v2 TEAM</button>
+        <button class="menu-btn" data-mode="koth">KING OF HILL</button>
+        <button class="menu-btn" data-mode="team3v3">3v3 TEAM</button>
       </div>
       <div class="menu-bottom-bar">
         <button class="menu-profile-btn">PROFILE</button>
@@ -74,14 +76,14 @@ export class MenuScreen {
     if (isMobile) {
       controlsEl.textContent = 'Left Joystick: Move | Right Joystick: Aim + Shoot';
     } else {
-      controlsEl.innerHTML = 'WASD: Move | Mouse: Aim | Click: Shoot<br>Q: Dash | E: Shield | R: Radar | F: Heal | V: Switch View';
+      controlsEl.innerHTML = 'WASD: Move | Mouse: Aim | Space: Shoot<br>Q: Dash | E: Shield | R: Radar | F: Heal | V: Switch View';
     }
 
     this.statusEl = this.el.querySelector('.menu-status');
-    this.accountEl = this.el.querySelector('.menu-account');
+    // this.accountEl = this.el.querySelector('.menu-account');
 
-    // Check for saved login
-    this._checkAuth();
+    // Check for saved login (disabled — re-enable when auth is needed)
+    // this._checkAuth();
   }
 
   _checkAuth() {
@@ -151,7 +153,7 @@ export class MenuScreen {
   show() {
     this.el.style.display = 'flex';
     this.statusEl.textContent = '';
-    this._checkAuth();
+    // this._checkAuth();
   }
 
   hide() {
